@@ -19,15 +19,14 @@ PASSWORD = "EBA2026"
 EXE_PATH = r"C:\Program Files (x86)\SteelProjects\Sp.Plm\Sp.Plm.exe"
 IMPORT_DIRECTORY = r"C:\Users\E.BENAMOR\Desktop\02XY"
 AFFAIRE = IMPORT_DIRECTORY.split("\\")[-1]
+DOSSIER_PROJETS_TRAVAILLER = r"C:\Users\E.BENAMOR\Desktop\projetTravailler"
+
 PHASE_MIN = 130
 PHASE_MAX = 140
 COMMENTAIRE_2 = "PU"
 
 PHASE_SEUIL_GR = 700    # phases strictement supérieures à ce seuil
 COMMENTAIRE_GR = "GR"   # commentaire 2 des repères secondaires dont le profil contient « _ »
-
-# Dossier créé sur le Bureau, qui reçoit les PDF
-NOM_DOSSIER_PDF = "Impressions Steel Projects"
 
 DESKTOP = Desktop(backend="uia")
 
@@ -198,46 +197,49 @@ def focus_grille_haut(window, timeout=30):
     entete.click_input()
 
 
-def dossier_pdf():
-    # Chemin réel du Bureau (fonctionne aussi si le Bureau est redirigé vers OneDrive),
-    # puis création du sous-dossier des PDF s'il n'existe pas
-    buf = ctypes.create_unicode_buffer(260)
-    ctypes.windll.shell32.SHGetFolderPathW(None, 0x10, None, 0, buf)  # 0x10 = Bureau
-    dossier = os.path.join(buf.value, NOM_DOSSIER_PDF)
-    os.makedirs(dossier, exist_ok=True)
+def dossier_affaire_pdf():
+    # Dossier de l'affaire : DOSSIER_PROJETS_TRAVAILLER\<AFFAIRE>, créé s'il n'existe pas
+    dossier = os.path.join(DOSSIER_PROJETS_TRAVAILLER, AFFAIRE)
+
+    if not os.path.isdir(dossier):
+        os.makedirs(dossier)
+        print("Dossier créé :", dossier)
     return dossier
 
 def enregistrer_pdf(timeout=120):
-    # Remplit la boîte « Enregistrer le fichier PDF sous » :
-    # nom = affaire + « PLM », dans le dossier du Bureau, puis vérifie le fichier créé
-    dossier = dossier_pdf()
-    chemin = os.path.join(dossier, f"{AFFAIRE} PLM.pdf")
+    # Remplit la boîte « Enregistrer le fichier PDF sous » avec « AFFAIRE PLM.pdf » dans le dossier de l'affaire
+    chemin = os.path.join(dossier_affaire_pdf(), f"{AFFAIRE} PLM.pdf")
 
     boite = DESKTOP.window(title="Enregistrer le fichier PDF sous")
     attendre(boite, "exists visible", timeout=timeout)
     handle = boite.wrapper_object().handle
     boite = DESKTOP.window(handle=handle)
 
+    # Attend que la boîte réponde (Steel Projects peut être occupé pendant la génération du PDF)
+    wait_until(300, 1, lambda: not ctypes.windll.user32.IsHungAppWindow(handle))
+
+    # Ramène la boîte au premier plan : elle peut être cachée derrière la fenêtre de l'appli
+    boite.set_focus()
+
     # Champ « Nom du fichier » (control_type obligatoire : la barre d'adresse a aussi l'auto_id 1001)
     nom = attendre(boite.child_window(auto_id="1001", control_type="Edit"))
-    nom.click_input()
-
-    # Caractères spéciaux de type_keys (+ ^ % ~ ( ) { } [ ]) mis entre accolades pour être tapés tels quels
-    texte = "".join("{" + c + "}" if c in "+^%~(){}[]" else c for c in chemin)
-    nom.type_keys("^a{BACKSPACE}" + texte, with_spaces=True)
-
-    # Vérifie que le champ contient bien le chemin complet avant d'enregistrer
+    nom.set_edit_text(chemin)
     wait_until(10, 0.2, lambda: (nom.get_value() or "") == chemin)
 
-    cliquer(boite.child_window(auto_id="1", control_type="Button"))  # Enregistrer
-    # Attend la fermeture de la boîte : Windows confirme que le handle n'est plus une fenêtre
-    wait_until(60, 0.2, lambda: not ctypes.windll.user32.IsWindow(handle))
+    # Reprend le focus avant le clic, puis clique sur Enregistrer
+    boite.set_focus()
+    cliquer(boite.child_window(auto_id="1", control_type="Button"))
 
-    # Vérifie que le PDF a bien été créé dans le bon dossier
+    # Si le fichier existe déjà, Windows demande confirmation : on répond Oui
+    confirmer = DESKTOP.window(title_re="Confirmer l.enregistrement.*")
+    if confirmer.exists(timeout=3):
+        cliquer(confirmer.child_window(title="Oui", control_type="Button"))
+
+    # Attend la fermeture de la boîte, puis vérifie que le PDF existe
+    wait_until(60, 0.5, lambda: not ctypes.windll.user32.IsWindow(handle))
     wait_until(300, 1, lambda: os.path.exists(chemin))
     print("PDF enregistré :", chemin)
     return chemin
-
 
 # ===== ÉTAPES =====
 def lancer_application(timeout=90):
@@ -275,9 +277,10 @@ def s_authentifier(window):
     splash.wait_not("exists", timeout=180, retry_interval=0.5)
     attendre_appli(window, timeout=120)
 
-def importer_tekla(window, dossier_projet):
-    # Importe les fichiers XML Tekla du projet donné et valide les fenêtres d'import
-    chemin_xml = os.path.join(dossier_projet, "*.XML")
+
+def importer_tekla(window, dossier_xml):
+    # Importe les fichiers XML Tekla du dossier donné et valide les fenêtres d'import
+    chemin_xml = os.path.join(dossier_xml, "*.XML")
 
     bouton_import = window.child_window(title="Import", control_type="Button")
     cliquer(bouton_import)
@@ -286,10 +289,14 @@ def importer_tekla(window, dossier_projet):
     tekla = DESKTOP.window(title_re=".*Importation Tekla.*")
     attendre(tekla, "exists visible")
 
+    # Clic dans le champ « Répertoire », vidage (Ctrl+A puis Retour arrière), puis saisie du chemin complet
     repertoire = tekla.child_window(title="Répertoire", auto_id="1001", control_type="Edit")
     attendre(repertoire).click_input()
-    repertoire.set_edit_text("")
-    repertoire.type_keys(echapper_keys(chemin_xml), with_spaces=True)
+    repertoire.type_keys("^a{BACKSPACE}" + chemin_xml, with_spaces=True)
+
+    # Vérifie que le champ contient bien le chemin complet avant de valider
+    wait_until(10, 0.2, lambda: (repertoire.get_value() or "").strip().upper() == chemin_xml.upper())
+
     cliquer(tekla.child_window(title="Ok", auto_id="1", control_type="Button"))
 
     ok_validation = window.child_window(title="Ok", control_type="Button", best_match="Button3")
@@ -300,57 +307,6 @@ def importer_tekla(window, dossier_projet):
     finir_import(window)
 
 
-# def trouver_fenetre_cam3d(window, timeout=60):
-#     # La fenêtre « Import [CAM3D] » est un dialogue enfant de Steel Projects
-#     spec = window.child_window(title_re=r".*CAM3D.*")
-
-#     def presente():
-#         try:
-#             return spec.exists(timeout=0)
-#         except COMError:
-#             return False  # appli occupée : on réessaie
-
-#     wait_until(timeout, 0.5, presente)
-#     return spec
-
-# def valider_ventilation_plans(window, timeout=120):
-#     # Attend la fenêtre « Ventilation des plans » (apparaît après le Ok de CAM3D) puis clique sur Ok
-#     ventilation = window.child_window(title="Ventilation des plans", control_type="Window")
-#     attendre(ventilation, "exists visible", timeout=timeout)
-#     cliquer(ventilation.child_window(title="Ok", control_type="Button"))
-#     ventilation.wait_not("exists visible", timeout=60, retry_interval=0.5)
-
-# def importer_CAM3D(window):
-#     # Importe les fichiers XML Tekla et valide les fenêtres d'import
-#     bouton_import = window.child_window(title="Import", control_type="Button")
-#     cliquer(bouton_import)
-#     cliquer_menu(bouton_import, "CAM3D")
-
-#     cam3d = trouver_fenetre_cam3d(window, timeout=60)
-#     attendre(cam3d, "exists visible", timeout=60)
-
-#     # Clic dans la zone du chemin (pas sur la flèche) pour placer le curseur
-#     chemin = cam3d.child_window(auto_id="ptbLocalFolder", control_type="Pane")
-#     attendre(chemin).click_input()
-#     time.sleep(0.5)
-
-#     # Efface l'ancien chemin, tape le nouveau, valide avec Entrée
-#     send_keys("^a", pause=0.1)
-#     send_keys(IMPORT_DIRECTORY + "{ENTER}", with_spaces=True, pause=0.05)
-#     time.sleep(2)
-
-#     # TEST : affiche les fichiers listés avant de valider
-#     liste = cam3d.child_window(auto_id="listView", control_type="List").wrapper_object()
-#     print("Fichiers affichés :", [i.window_text() for i in liste.children()])
-
-#     # Clic sur Ok du dialogue CAM3D
-#     cliquer(cam3d.child_window(title="Ok", control_type="Button"))
-
-#     # Clic sur Ok de la fenêtre « Ventilation des plans »
-#     valider_ventilation_plans(window)
-
-#     finir_import(window)
-
 def finir_import(window, timeout=3600):
     # Attend la fin de l'import (la comparaison de profils est validée si elle apparaît),
     # puis clique sur Ok final
@@ -360,6 +316,7 @@ def finir_import(window, timeout=3600):
 
     cliquer_avec_comparaison(window, ok_final, timeout=timeout)
     dialog.wait_not("exists", timeout=60, retry_interval=0.2)
+
 
 def ouvrir_gestion_production(window):
     # Ouvre l'écran Gestion de production
@@ -558,6 +515,7 @@ def impression(window):
     cliquer(imprimer_tout)
     enregistrer_pdf()
 
+
 def fermer_apercu(timeout=60):
     # Ferme toutes les fenêtres « Aperçu x/y » ouvertes, une fois le PDF enregistré
     apercus = DESKTOP.windows(title_re=TITRE_APERCU)
@@ -575,8 +533,11 @@ def fermer_apercu(timeout=60):
     print(f"{len(handles)} fenêtre(s) d'aperçu fermée(s)")
 
 
-def revenir_steel_projects(window):
-    # Redonne le focus à la fenêtre principale Steel Projects
+def revenir_steel_projects(window, timeout=300):
+    # Attend que Steel Projects réponde de nouveau (il peut rester occupé après l'impression),
+    # puis lui redonne le focus
+    handle = window.wrapper_object().handle
+    wait_until(timeout, 1, lambda: not ctypes.windll.user32.IsHungAppWindow(handle))
     window.set_focus()
     attendre_appli(window)
 
@@ -591,33 +552,29 @@ def quitter_gestion_affaires(window, timeout=60):
     except DelaiDepasse:
         raise RuntimeError("L'écran Gestion d'Affaires ne s'est pas fermé avec Ctrl+Q")
     attendre_appli(window)
-    print("Gestion d'Affaires fermée")    
+    print("Gestion d'Affaires fermée")
 
 
 # ===== SCRIPT PRINCIPAL =====
 def main_complet():
     # Enchaîne toutes les étapes du workflow
     window = lancer_application()
-    # window = Desktop(backend="uia").window(title_re=".*Steel Projects.*")
 
     s_authentifier(window)
-    importer_tekla(window, IMPORT_DIRECTORY)    #/ importer_CAM3D(window)
-    ouvrir_gestion_production(window)
-    filtrer_par_affaire(window)
-    filtre_par_phase(window)
-    ajouter_scribing(window)
-    selectionner_phases(window)
-    modifier_repere_secondaire(window)
-    commentaire_gr(window)
-    quitter_gestion_production(window)
+    # importer_tekla(window, IMPORT_DIRECTORY)    #/ importer_CAM3D(window)
+    # ouvrir_gestion_production(window)
+    # filtrer_par_affaire(window)
+    # filtre_par_phase(window)
+    # ajouter_scribing(window)
+    # selectionner_phases(window)
+    # modifier_repere_secondaire(window)
+    # commentaire_gr(window)
+    # quitter_gestion_production(window)
     impression(window)
     fermer_apercu()
     revenir_steel_projects(window)
     quitter_gestion_affaires(window)
 
 
-
-
-
 if __name__ == "__main__":
-    main_complet()    # workflow complet : réactiver après le test
+    main_complet()    

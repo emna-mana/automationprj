@@ -1,4 +1,6 @@
+import hashlib
 import os
+import re
 import shutil
 import time
 import unicodedata
@@ -10,225 +12,243 @@ from collections import Counter
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys
 
-IMPORT_DIRECTORY = r"C:\Users\E.BENAMOR\Desktop\01XY"
-AFFAIRE = IMPORT_DIRECTORY.split("\\")[-1]
+DOSSIER_PROJETS_DEFAUT = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\02XY"
+
+AFFAIRE = DOSSIER_PROJETS_DEFAUT .split("\\")[-1]
 
 FICHIERS = [
-    r"C:\Users\E.BENAMOR\Desktop\projetTravailler\02XY\02XY PLM.PDF",
-    r"C:\Users\E.BENAMOR\Desktop\projetTravailler\02XY\CROQUIS DEBITAGE 02XY.pdf",
+    r"C:\Users\E.BENAMOR\Desktop\projetTravailler\02XY\CROQUIS DEBITAGE 02XY.pdf",  #CHANGE
+    r"C:\Users\E.BENAMOR\Desktop\projetTravailler\02XY\02XY PLM.PDF", #Toujours le fichier PDF qui a nomAffaire PLM sous DOSSIER_PROJETS_DEFAUT
     r"C:\Users\E.BENAMOR\Desktop\projetTravailler\FER PLAT.xlsx"
 ]
  
 
+ 
 
 PROMPT_LIGNES = [
-    '',
-    '# PROMPT – PRÉPARATION DE FABRICATION (GROUPE MATEM)',
+    '# PROMPT – PRÉPARATION DE FABRICATION (GROUPE MATEM) – v3 ',
     '',
     '## 1. RÔLE',
-    'Tu es préparateur de fabrication en construction métallique pour GROUPE MATEM, expert en charpente métallique, en programmation CNC FICEP et en optimisation matière (mise en barre et mise en tôle).',
+    'Tu es préparateur de fabrication en construction métallique pour GROUPE MATEM. Tu es expert en charpente métallique, en programmation CNC FICEP et en optimisation matière (mise en barre et mise en tôle).',
     '',
     "## 2. FICHIERS D'ENTRÉE",
     '| Réf. | Fichier | Rôle |',
     '|---|---|---|',
-    '| F1 | « fichier 1.pdf » | Croquis de débitage à répartir (document de travail) |',
-    '| F2 | « fichier 2.pdf » | Plans de référence (document qui fait foi) |',
-    '| F3 | « Tableau fers plats disponibles » | Liste des fers plats standard en stock (largeur × épaisseur) |',
+    '| F1 | « fichier 1.pdf » | Croquis de débitage à répartir (document de travail, Tekla) |',
+    '| F2 | « fichier 2.pdf » | Plans CN de référence (document qui fait foi, Steel Projects) |',
+    '| F3 | « Tableau fers plats disponibles » | Fers plats en stock (largeur × épaisseur) |',
+    "| F4 | « Règle de trusquinage A164 » | Pinces et entraxes mini de l'A164 |",
     '',
-    'Si un fichier est absent ou illisible, arrête-toi et signale-le. Ne poursuis pas avec des données supposées.',
+    '* F1 ou F2 absent ou illisible : arrête-toi et signale-le.',
+    '* F3 absent : continue avec la gamme standard EN 10058 (largeurs 20 à 300, ép. 5 à 25), en signalant « DONNÉE MANQUANTE – F3 » dans chaque ligne concernée.',
+    "* F4 absent : affecte quand même à l'A164, en écrivant « DONNÉE MANQUANTE – trusquinage A164 » pour chaque pièce percée.",
+    '* F2 peut être un PDF image (texte non extractible) : lis les cartouches visuellement, pas par OCR seul.',
     '',
     '## 3. RÈGLES GÉNÉRALES (OBLIGATOIRES)',
-    "- R1 : Utilise UNIQUEMENT les caractéristiques machines de la section 4 et les données des fichiers. N'invente aucune valeur. Si une donnée manque, écris « DONNÉE MANQUANTE : … ».",
-    '- R2 : Traite TOUS les repères, un par un, sans en oublier et sans doublon. Chaque repère est affecté à UNE SEULE machine (sans recoupement).',
-    "- R3 : En cas de divergence entre F1 et F2, c'est F2 qui fait foi. Signale la divergence, ne la corrige pas en silence.",
-    '- R4 : Nuance de tous les matériaux : S275.',
-    "- R5 : Un repère qu'aucune machine ne peut réaliser est marqué « HORS CAPACITÉ », avec la caractéristique dépassée.",
+    '',
+    "* R1 : utilise UNIQUEMENT les caractéristiques de la section 4 et les données des fichiers. N'invente aucune valeur. Si une donnée manque, écris « DONNÉE MANQUANTE : … ».",
+    '* R2 : traite TOUS les repères, un par un, sans oubli ni doublon. Chaque repère va à UNE SEULE machine (sans recoupement).',
+    '* R3 : en cas de divergence entre F1 et F2, F2 fait foi. Signale la divergence, ne la corrige pas en silence.',
+    "* R4 : nuance de tous les matériaux : S275JR, même si F1 ou F2 indique S235JR. Signale l'écart.",
+    "* R5 : un repère qu'aucune machine ne peut réaliser est marqué « HORS CAPACITÉ », avec la caractéristique dépassée.",
+    '* R6 : les règles atelier de la section 4.1 sont PRIORITAIRES sur les fiches techniques constructeur.',
     '',
     "## 4. MOYENS DE L'ATELIER",
     '',
-    "### MACHINE 1 – FICEP A164 : ligne d'usinage de cornières",
-    '(Poinçonnage, marquage et coupe de cornières et de fers plats)',
+    "### 4.1 RÈGLES ATELIER (chef d'atelier – prioritaires)",
     '',
-    'Profilés usinables :',
-    '- Cornières (acier 410 N/mm²) : mini 30x30x3 mm, maxi 160x160x19 mm',
-    '- Fers plats (avec outillage en option) : mini 50x5 mm, maxi 160x19 mm',
+    '**OPÉRATION MANUELLE**',
     '',
-    'Poinçonnage :',
-    '- Capacité maxi de poinçonnage : 720 kN',
-    '- Diamètres disponibles sur chaque aile de la cornière : 2',
-    '- Diamètre maxi avec outillage standard : 32 mm',
-    '- Diamètre x épaisseur maxi : 30x19 mm (acier 410 N/mm²), 25x19 mm (acier 510 N/mm²)',
+    '1. Cornières sans trous et de longueur ≤ 2050 mm.',
+    "2. Tubes sans trous, coupes d'équerre (angle droit).",
+    '3. Fers ronds.',
+    '4. Tiges filetées.',
+    '5. Grugeage des pièces uniques (profilés).',
     '',
-    'Coupe :',
-    '- Force maxi de coupe : 2200 kN (cisaillage)',
+    '**CISAILLE + POINÇONNEUSE FICEP P803**',
     '',
-    'Autres :',
-    '- Vitesse maxi de translation longitudinale de la barre : 40 m/min',
-    '- Vitesse de positionnement des axes de traçage (trusquin) : 7 m/min',
-    '- Longueur mini de chute de fin de barre : 220 mm',
-    "- Nombre d'axes CNC : 6",
-    '- Tolérances des profilés : UNI 5783-73 et UNI 5784-73',
+    '1. Trusquinage (distance axe du trou → bord) ≥ 25 mm.',
+    '2. Poinçonnage / perçage : Ø maxi ≤ 32 mm.',
+    '3. Longueur maxi de la pièce : 800 mm.',
+    '4. Largeur maxi de la pièce : 500 mm.',
+    '5. Trous oblongs : NON exécutables.',
+    '6. Épaisseur de tôle maxi : 15 mm.',
+    '7. Cisaille guillotine : épaisseur maxi 15 mm, longueur de coupe maxi 4000 mm, coupes droites uniquement.',
     '',
-    '### MACHINE 2 – FICEP GEMINI 254 PG : portique CNC de perçage, fraisage et coupe plasma de tôles',
+    '**FICEP A164**',
     '',
-    'Alimentation :',
-    '- 400 V triphasé, 50 Hz, puissance installée 65 kW',
-    "- Pression d'air : 6 à 8 bar",
+    "1. Ø mini poinçonnable selon l'épaisseur : Ø8 si ép. ≤ 6 mm ; Ø10 si ép. ≤ 8 mm ; Ø12 si ép. ≤ 10 mm.",
+    '2. Fers plats : largeur 50 à 160 mm.',
+    '3. Cornières : aile 30 à 160 mm.',
+    '4. Longueur mini de la barre chargée : ≥ 2050 mm.',
+    '5. Trusquinage : selon le document F4.',
+    '6. Coupe droite uniquement : les chanfreins sont à reprendre en manuel.',
     '',
-    "Tôle à l'entrée :",
-    '- Longueur : mini 1250 mm, maxi 12100 mm',
-    '- Largeur : mini 800 mm, maxi 2540 mm',
+    '**FICEP GEMINI 254 PG**',
     '',
-    'Pièce à la sortie :',
-    '- Longueur mini : 100 mm, largeur mini : 100 mm',
+    '1. Toutes les pièces avec trous Ø ≥ 32 mm.',
+    '2. Toutes les pièces avec trous oblongs.',
+    '3. Découpe plasma : tôle ≤ 35 mm ; découpe oxycoupage : tôle ≤ 80 mm.',
+    "4. Nombre d'outils (Ø de perçage différents) par nesting : ≤ 7.",
+    '5. Pièce de sortie mini : 100 x 100 mm. Une pièce plus étroite est signalée « DÉPASSEMENT – sortie mini » (micro-attaches ou évacuation manuelle).',
+    '6. Épaisseur mini : 5 mm.',
     '',
-    'Perçage / fraisage :',
-    '- 1 tête de perçage verticale, 1 broche',
-    '- Diamètre maxi de perçage : 32 mm',
-    '- Diamètre maxi de fraisage : 240 mm',
-    '- Épaisseur de tôle : mini 5 mm, maxi de perçage 80 mm',
-    '- Poussée axiale maxi (perçage) : 3200 N',
-    '- Puissance broche (S3) : 11 kW',
-    '- Vitesse de broche : 250 à 6000 tr/min, réglable en continu par programme',
+    '**FICEP 1003 DEB**',
     '',
-    'Coupe plasma (option) :',
-    '- HPR260XD : pleine tôle 38 mm, bord de tôle 64 mm, coupe inclinée 45° pleine tôle 27 mm, coupe inclinée 45° bord de tôle 45 mm',
-    '- HPR400XD : pleine tôle 50 mm, bord de tôle 80 mm, coupe inclinée 45° pleine tôle 35 mm, coupe inclinée 45° bord de tôle 56 mm',
+    '1. Fers plats acceptés uniquement si largeur ≥ 200 mm ET épaisseur ≥ 15 mm. Un fer plat plus étroit ou plus mince ne passe pas sur la 1003 DEB.',
     '',
-    'Vitesses et divers :',
-    '- Translation longitudinale X maxi : 32 m/min',
-    '- Positionnement transversal Y : 42 m/min, axe auxiliaire U : 42 m/min',
-    '- Hauteur de travail : 650 mm',
-    '- Normes tôle brute : UNI EN 10025 (fourniture), UNI EN 10029 (tolérances)',
+    '**TRONÇONNEUSE LINÉAIRE**',
     '',
-    '### MACHINE 3 – FICEP 1003 DEB : ligne de perçage et de sciage CNC pour profilés lourds',
-    '(Poutrelles, fers U, cornières, plats, tubes)',
+    "* Sépare une ébauche de profilé en deux jarrets (coupe longitudinale de l'âme).",
     '',
-    'Tous profilés :',
-    '- Hauteur : mini 80 mm, maxi 1015 mm',
-    '- Largeur : mini 10 mm, maxi 450 mm',
-    '- Longueur mini transférable : 2500 mm (longueur maxi selon lay-out)',
+    '### 4.2 FICHES TECHNIQUES CONSTRUCTEUR',
     '',
-    'Profilés acceptés :',
-    '- Poutrelles double T (laminées ou reconstituées, sans cambrage) : hauteur 80 à 1015 mm, largeur des ailes 42 à 450 mm',
-    '- Fers U (âme en bas) : hauteur 80 à 1015 mm, largeur des ailes 45 à 300 mm',
-    '- Cornières (même inégales) : mini 80x80x8 mm, maxi 250x250x40 mm',
-    '- Plats : largeur 100 à 1000 mm',
-    '- Tubes carrés : 80x80 à 450x450 mm',
-    '- Tubes rectangulaires : 80x40 à 1000x450 mm',
+    "#### MACHINE 1 – FICEP A164 : ligne d'usinage de cornières et de fers plats",
     '',
-    'Perçage :',
-    '- 3 têtes (1 verticale + 2 horizontales), 1 broche par tête',
-    '- Diamètre maxi de perçage : 40 mm, épaisseur maxi de perçage : 100 mm',
-    '- Puissance broche (S6-40%) : 27 kW, cône outil ISO 40',
-    '- Vitesse de broche : 180 à 5000 tr/min, avance en perçage : 40 à 1000 mm/min',
-    '- Approche/retour rapide : 12 m/min',
-    '- Course trusquin : tête verticale 0 à 1015 mm, têtes horizontales -5 à 455 mm',
+    '* Cornières (acier 410 N/mm²) : mini 30x30x3 mm, maxi 160x160x19 mm.',
+    '* Fers plats (outillage en option) : mini 50x5 mm, maxi 160x19 mm.',
+    '* Poinçonnage : 720 kN ; 2 diamètres par aile ; Ø maxi 32 mm (outillage standard) ; Ø x ép. maxi 30x19 (410 N/mm²) et 25x19 (510 N/mm²).',
+    '* Coupe : 2200 kN (cisaillage).',
+    '* Translation barre : 40 m/min ; trusquin : 7 m/min ; 6 axes CNC.',
+    '* Chute mini de fin de barre : 220 mm.',
+    '* Tolérances : UNI 5783-73, UNI 5784-73.',
     '',
-    'Coupe (scie à ruban) :',
-    '- Coupe à 90° : mini 80x10 mm, maxi 1015x450 mm',
-    '- Coupe à 45° : maxi 620x450 mm ; coupe à 60° : maxi 350x350 mm',
-    '- Moteur ruban 9 kW, ruban 41x1,3x7880 mm, vitesse du ruban 60 à 170 m/min',
-    '- Course de coupe : 0 à 450 mm',
+    '#### MACHINE 2 – FICEP GEMINI 254 PG : portique CNC de perçage, fraisage et coupe thermique de tôles',
     '',
-    'Autres :',
-    '- Poids maxi positionnable : 5400 kg, poids linéaire maxi : 220 kg/m',
-    '- Translation longitudinale maxi : 50 m/min',
-    '- Positionnement têtes horizontales : 12 m/min, tête verticale : 30 m/min',
-    '- Hauteur de travail : 850 mm',
-    '- Normes : UNI EN 10025 (fourniture) ; tolérances UNI ISO 5679, UNI ISO 5680, UNI 5397, UNI 5398, UNI EN 10024, UNI EN 10034, UNI EN 10279, UNI EN 10056-1, UNI EN 10056-2',
+    "* Tôle à l'entrée : longueur 1250 à 12100 mm ; largeur 800 à 2540 mm.",
+    '* Pièce à la sortie : mini 100 x 100 mm.',
+    '* Perçage : 1 tête verticale ; Ø maxi 32 mm ; épaisseur 5 à 80 mm ; poussée 3200 N ; broche 11 kW, 250 à 6000 tr/min.',
+    '* Fraisage : Ø maxi 240 mm.',
+    '* Plasma HPR260XD : 38 mm pleine tôle, 27 mm à 45°. Plasma HPR400XD : 50 mm pleine tôle, 35 mm à 45°.',
+    '* Vitesses : X 32 m/min ; Y et U 42 m/min. Hauteur de travail : 650 mm.',
+    '* Normes : UNI EN 10025, UNI EN 10029.',
     '',
-    '### MOYENS COMPLÉMENTAIRES',
-    '- CISAILLE GUILLOTINE : épaisseur maxi 15 mm, longueur de coupe maxi 4000 mm (coupes droites uniquement).',
-    "- POINÇONNEUSE FICEP P803 : poinçonnage des pièces cisaillées. Capacités non fournies : si un repère dépend d'une capacité de la P803, écris « DONNÉE MANQUANTE – capacité P803 ».",
-    '- TRONÇONNEUSE LINÉAIRE : découpe des jarrets, pour séparer un profilé en deux jarrets.',
+    '#### MACHINE 3 – FICEP 1003 DEB : ligne de perçage et de sciage CNC pour profilés',
     '',
-    "## 5. RÈGLES D'AFFECTATION (dans cet ordre)",
-    '1. Jarrets (profilé découpé en deux jarrets) → TRONÇONNEUSE LINÉAIRE.',
-    '2. Profilés lourds (IPE, HEA, HEB, UPN/UPE, tubes, grandes cornières ≥ 80x80x8, plats ≥ 100 mm) à percer et/ou scier → 1003 DEB (vérifier longueur ≥ 2500 mm, sinon le signaler).',
-    '3. Petites cornières (≤ 160x160x19) et fers plats (≤ 160x19) avec trous Ø ≤ 32 mm → A164.',
-    "4. Cornière entre 80x80x8 et 160x160x19 → A164 par défaut ; 1003 DEB si l'épaisseur ou le diamètre dépasse la capacité de poinçonnage, ou si une coupe d'onglet est nécessaire.",
-    '5. Pièces en tôle rectangulaires, épaisseur ≤ 15 mm, longueur ≤ 4000 mm → CISAILLE + P803.',
-    "6. Pièces en tôle de forme (angles ≠ 90°, découpes, échancrures) ou épaisseur > 15 mm → nesting Steel Project par épaisseur, puis GEMINI 254 PG (plasma jusqu'à 30 mm d'épaisseur).",
-    '7. Petites pièces : tôle ou fer plat rectangulaire < 100 x 100 mm → à fabriquer dans les CHUTES (noter « CHUTE » et la machine utilisée). Rappel : la GEMINI ne sort pas de pièce < 100 x 100 mm.',
-    "8. Contrôles systématiques : dimensions du profil, diamètre et épaisseur au droit du trou, longueur mini, nuance d'acier.",
+    '* Hauteur 80 à 1015 mm ; largeur 10 à 450 mm ; longueur mini transférable 2500 mm.',
+    '* Poutrelles I/H : h 80 à 1015, ailes 42 à 450. Fers U : h 80 à 1015, ailes 45 à 300.',
+    '* Cornières : 80x80x8 à 250x250x40. Plats : largeur 100 à 1000.',
+    '* Tubes carrés : 80x80 à 450x450. Tubes rectangulaires : 80x40 à 1000x450.',
+    '* Perçage : 3 têtes ; Ø maxi 40 mm ; épaisseur maxi 100 mm ; ISO 40 ; 27 kW.',
+    '* Sciage : à 90° mini 80x10 et maxi 1015x450 ; à 45° maxi 620x450 ; à 60° maxi 350x350.',
+    "  → Pour les fers plats, la règle atelier (largeur ≥ 200 et ép. ≥ 15) s'applique.",
+    '* Poids maxi : 5400 kg ; 220 kg/m.',
+    '* Chute mini de fin de barre : non fournie → « DONNÉE MANQUANTE ».',
+    '',
+    "## 5. RÈGLES D'AFFECTATION (appliquer dans cet ordre, la première qui convient l'emporte)",
+    '',
+    '1. Fer rond, tige filetée, grugeage de pièce unique → MANUEL.',
+    "2. Tube sans trous et à coupes d'équerre → MANUEL.",
+    '3. Cornière sans trous de longueur ≤ 2050 mm → MANUEL.',
+    "4. Jarret → TRONÇONNEUSE LINÉAIRE. L'ébauche est débitée sur la 1003 DEB et comptée dans la mise en barre ; 1 ébauche = 2 jarrets.",
+    '5. Poutrelles IPE/HEA/HEB, fers U, tubes percés ou à coupe biaise, cornières ≥ 80x80x8 percées → 1003 DEB. Une pièce < 2500 mm est débitée en fin de barre (à signaler).',
+    "6. Cornière percée de 30 à 160 mm (hors règle 5) → A164 (vérifier le Ø mini selon l'épaisseur).",
+    '7. Tôle ou plat avec un trou Ø ≥ 32 mm ou un trou oblong → GEMINI (épaisseur concernée).',
+    '8. Pièce de moins de 100 x 100 mm → CHUTES. Si percée : P803 si trusquinage ≥ 25 mm, sinon perçage MANUEL.',
+    '9. Fer plat retenu (section 6) de largeur ≥ 200 mm et ép. ≥ 15 mm → 1003 DEB.',
+    '10. Fer plat retenu de largeur 50 à 160, avec un Ø ≥ Ø mini A164 → A164.',
+    "11. Pièce rectangulaire (chanfreins tolérés) d'ép. ≤ 15 mm :",
+    '    - sans trou → CISAILLE ;',
+    '    - percée, avec L ≤ 800, l ≤ 500, Ø ≤ 32, trusquinage ≥ 25 et sans oblong → CISAILLE + P803 ;',
+    '    - sinon → GEMINI.',
+    '12. Toute autre pièce (forme, angles ≠ 90°, ép. > 15 mm) → nesting Steel Project par épaisseur, puis GEMINI (plasma ≤ 35 mm, oxycoupage ≤ 80 mm).',
+    '',
+    'Contrôles systématiques pour chaque repère : dimensions, Ø et épaisseur au droit du trou, trusquinage, longueur mini, nuance, et longueur de pièce comparée à la longueur de barre achetée.',
     '',
     '## 6. RÈGLE DE CONVERSION TÔLE → FER PLAT',
-    "- Une pièce en tôle RECTANGULAIRE (tous les angles à 90°, chanfreins tolérés) dont la largeur et l'épaisseur correspondent à un fer plat standard du tableau F3 → remplacer par ce fer plat.",
-    '  Exemple : tôle ép. 10 x 80 de large → FER PLAT 80x10.',
-    '- Une pièce avec un ou plusieurs angles différents de 90° (hors chanfreins) → RESTE EN TÔLE.',
-    '- Aucun fer plat équivalent dans F3 → RESTE EN TÔLE (motif : « pas de FP disponible »).',
-    "- N'utilise QUE les fers plats listés dans F3.",
+    '',
+    "* Pièce RECTANGULAIRE (tous les angles à 90° ; coins coupés à 45° ≤ 25 mm = chanfreins tolérés) dont la largeur et l'épaisseur existent dans F3 → remplacer par ce fer plat. Exemple : tôle ép. 10 x 80 de large → FER PLAT 80x10.",
+    '* Pièce avec au moins un angle ≠ 90° hors chanfreins (gousset, trapèze, échancrure) → RESTE EN TÔLE.',
+    '* Aucun équivalent dans F3 → RESTE EN TÔLE (motif : « pas de FP disponible »).',
+    "* Achat : sauf instruction contraire, les fers plats sont achetés en tôles 3000 x 1500 et refendus à la cisaille. Donne aussi, à titre d'option, les mètres linéaires par section de fer plat.",
     '',
     "## 7. TÂCHES À RÉALISER (dans l'ordre)",
     '',
     '### Tâche 1 – Comparaison F1 / F2, plan par plan et repère par repère',
-    'Pour chaque repère, compare : désignation du profil, dimensions (L x l x ép.), quantité, nombre et diamètre des trous, angles et coupes, nuance.',
+    '',
+    '* F2 peut répartir un même repère sur plusieurs plans (ex. 700 et 701) : ADDITIONNE les quantités de tous les plans avant de comparer.',
+    '* Quantité F1 : compare la quantité du cartouche ET le total du tableau « Répartition par assemblage ». Signale tout écart.',
+    '* Compare : repère (détecter les renommages, ex. W72 ↔ G10), profil, dimensions (rectangle englobant L x l x ép), quantité, nombre et Ø des trous, angles et coupes, nuance.',
+    '* Jarrets : compare la longueur hors-tout F1 et la longueur CN F2 (« À VÉRIFIER ») ; vérifie que la quantité des ébauches jumelées (ex. J6XJ8) = nombre de paires nécessaires.',
+    '* Repère présent dans un seul fichier : le signaler.',
     '',
     "### Tâche 2 – Tableau de vérification et d'affectation (un seul tableau, tous les repères)",
     '',
     '### Tâche 3 – Découpage de F1',
-    'Divise le PDF des croquis en classeurs séparés, un par moyen :',
-    '1003 DEB / A164 / GEMINI (par épaisseur) / CISAILLE + P803 / TRONÇONNEUSE / CHUTES.',
-    'Donne pour chaque classeur la liste des repères et des numéros de pages.',
+    'Divise le PDF des croquis en un classeur par moyen : 1003 DEB / A164 / TRONÇONNEUSE / CISAILLE + P803 / CISAILLE / GEMINI ép. x (un par épaisseur) / MANUEL / CHUTES. Donne pour chaque classeur la liste des repères et des numéros de pages.',
+    '',
+    '* Un fichier PDF par classeur, nommé « Affaire_MACHINE.pdf » (ex. 26DU_1003_DEB.pdf, 26DU_GEMINI_ép10.pdf, 26DU_CISAILLE_P803.pdf).',
+    "* Chaque page de F1 est copiée telle quelle, sans modification ni recadrage, dans l'ordre des repères de F1.",
+    '* Une page de F1 va dans un seul classeur, celui de la machine affectée au repère (tableau 2).',
+    '* Ne crée pas de classeur vide.',
+    '* Le total des pages des classeurs doit être égal au nombre de pages de F1 : aucune page oubliée, aucune page en double.',
+    '* Regroupe tous les PDF et le classeur Excel dans un fichier .zip nommé « Affaire_Preparation_vX.zip ».',
     '',
     '### Tâche 4 – Mise en barre',
-    '- Profilés : barres de 12 m et 15 m (choisir la combinaison qui donne le moins de chute)',
-    '- Tubes : barres de 6 m',
-    '- Cornières : barres de 12 m',
-    '- Trait de scie : 5 mm entre chaque pièce',
-    '- Respecter la chute mini de fin de barre de la machine affectée (A164 : 220 mm)',
-    "Pour chaque barre, donner : profil, longueur de barre, repères placés (avec quantité et longueur), chute restante, taux d'utilisation.",
+    '',
+    '* Profilés : barres de 12 m et de 15 m ; choisis, barre par barre, la combinaison qui minimise la longueur totale achetée.',
+    '* Tubes : barres de 6 m. Si une pièce dépasse la barre : « DÉPASSEMENT », propose des barres de 12 m ou un aboutage, et calcule les deux.',
+    '* Cornières : barres de 12 m ; réserve la chute mini A164 de 220 mm.',
+    "* Ébauches de jarrets : incluses dans les barres du profil d'origine.",
+    '* Trait de scie : 5 mm entre chaque pièce.',
+    "Pour chaque barre, donne : profil, longueur, repères (qté x L), chute, taux d'utilisation, machine.",
     '',
     '### Tâche 5 – Mise en tôle (nesting estimatif)',
-    '- Fers plats et tôles : tout est pris en tôles de 3000 x 1500 mm',
-    '- Regrouper par épaisseur',
-    '- Marge de nesting : 5 mm entre pièces et en bord de tôle',
-    "- Plasma GEMINI jusqu'à 30 mm d'épaisseur",
-    "Pour chaque épaisseur : nombre de tôles, surface utile, taux de chute. Préciser que c'est une estimation à valider dans Steel Project.",
+    '',
+    '* Fers plats et tôles : tout en tôles de 3000 x 1500 mm, regroupés par épaisseur.',
+    '* Marge de nesting : 5 mm entre pièces et en bord de tôle.',
+    '* Exclure les pièces « CHUTES ».',
+    '* Vérifier pour chaque nesting GEMINI : ≤ 7 Ø différents, épaisseur ≤ 35 mm (plasma) ou ≤ 80 mm (oxycoupage).',
+    "Pour chaque épaisseur, donne : nombre de tôles, surface des pièces, taux de chute, nombre d'outils. Précise que c'est une estimation à valider dans Steel Project.",
     '',
     "### Tâche 6 – Bon d'achat",
-    "Regroupe les besoins issus des tâches 4 et 5 pour établir le bon d'achat.",
+    'Regroupe les besoins des tâches 4 et 5 : désignation, dimensions, longueur ou format, quantité, nuance S275JR, poids unitaire et poids total. Indique les kg/m utilisés et leur source.',
     '',
     '## 8. FORMAT DE SORTIE',
+    'Livre un classeur Excel (un onglet par tableau, totaux en formules), les PDF des classeurs par machine (tâche 3) et un .zip qui regroupe le tout.',
     '',
-    'OBLIGATOIRE : toute la réponse est fournie dans UN SEUL fichier Excel (.xlsx). Chaque tableau (Tableau 1 à Tableau 6) est un onglet distinct, nommé « Tableau 1 » à « Tableau 6 ». Un onglet « Récapitulatif » liste toutes les valeurs « DONNÉE MANQUANTE » et « HORS CAPACITÉ ». Ne recopie pas les tableaux en texte dans le message : la réponse écrite se limite au nom du fichier livré et à un bref résumé.',
+    '**Précision (prioritaire sur le paragraphe ci-dessus) : ne crée PAS de fichier .zip. Livre les PDF des classeurs par machine directement, un fichier PDF par classeur, en plus du classeur Excel.**',
     '',
     '### Tableau 1 – Différences F1 / F2',
-    '| Plan | Rep | Élément comparé | Valeur F1 | Valeur F2 | Écart | Action |',
+    '| Plan F2 | Rep | Élément comparé | Valeur F1 | Valeur F2 | Écart (OUI / NON / À VÉRIFIER) | Action |',
     '|---|---|---|---|---|---|---|',
     'Si aucun écart pour un repère : une ligne « Conforme ».',
     '',
     '### Tableau 2 – Vérification et affectation',
-    "| Rep | Qté | Profil d'origine | Dimensions | Angles ≠ 90° (O/N) | Profil retenu | FP dispo F3 (O/N) | Machine / moyen | Contrôle capacité (OK / dépassement) | Remarque |",
-    '|---|---|---|---|---|---|---|---|---|---|',
+    "| Rep | Qté | Profil d'origine | Dimensions | Perçages (nb x Ø) | Trusquinage mini | Angles ≠ 90° (O/N) | Profil retenu | FP dispo F3 (O/N) | Machine / moyen | Contrôle capacité (OK / DONNÉE MANQUANTE / DÉPASSEMENT / HORS CAPACITÉ) | Remarque | Page F1 |",
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     '',
     '### Tableau 3 – Classeurs par machine',
-    '| Classeur | Repères | Pages F1 | Nb pièces |',
-    '|---|---|---|---|',
+    '| Classeur | Repères | Pages F1 | Nb repères | Nb pièces |',
+    '|---|---|---|---|---|',
     '',
     '### Tableau 4 – Mise en barre',
-    '| Profil | Barre (m) | N° barre | Repères (qté x L) | Chute (mm) | Utilisation % |',
-    '|---|---|---|---|---|---|',
+    '| Profil | Barre (m) | N° barre | Repères (qté x L) | Longueur utilisée | Chute (mm) | Utilisation % | Machine |',
+    '|---|---|---|---|---|---|---|---|',
     '',
     '### Tableau 5 – Mise en tôle',
-    '| Épaisseur | Nb tôles 3000x1500 | Repères | Surface pièces (m²) | Chute % | Machine |',
-    '|---|---|---|---|---|---|',
+    '| Épaisseur | Nb tôles 3000x1500 | Repères | Surface pièces (m²) | Chute % | Machine(s) | Outils GEMINI (≤ 7) |',
+    '|---|---|---|---|---|---|---|',
     '',
     "### Tableau 6 – Bon d'achat (GROUPE MATEM)",
     '| N° | Désignation | Dimensions | Longueur / format | Qté | Nuance | Poids unitaire (kg) | Poids total (kg) |',
     '|---|---|---|---|---|---|---|---|',
-    'Ajouter le total du poids par famille (profilés, tubes, cornières, tôles) et le total général.',
+    'Ajoute le total du poids par famille (profilés, tubes, cornières, tôles) et le total général.',
     '',
     '## 9. CONTRÔLE FINAL (avant de répondre)',
-    '- Le nombre de repères du tableau 2 est égal au nombre total de repères de F1 et F2.',
-    '- Chaque repère est affecté à une seule machine.',
-    '- Les quantités de la mise en barre et de la mise en tôle correspondent à celles du tableau 2.',
-    '- Toutes les valeurs « DONNÉE MANQUANTE » et « HORS CAPACITÉ » sont listées dans un récapitulatif à la fin.',
+    '',
+    '* Le nombre de repères du tableau 2 = nombre de repères distincts de F1 (plus ceux de F2 seuls, signalés).',
+    '* Chaque repère est affecté à une seule machine ; le total des pages des classeurs = nombre de pages de F1.',
+    '* Les quantités de la mise en barre et de la mise en tôle = celles du tableau 2 (quantités F2 retenues).',
+    "* Aucune pièce plus longue que sa barre d'achat sans signalement.",
+    '* Toutes les mentions « DONNÉE MANQUANTE », « DÉPASSEMENT » et « HORS CAPACITÉ », ainsi que les hypothèses, sont listées dans un récapitulatif final.',
+    '',
 ]
 
-DELAI_REPONSE = 1800 # secondes d'attente maximale pour la réponse de Claude
-DOSSIER_SORTIE = os.path.join(r"C:\Users\E.BENAMOR\Desktop\projetTravailler", AFFAIRE)
+PROMPT = "\n".join(PROMPT_LIGNES)
+
+DELAI_REPONSE = 3600 # secondes d'attente maximale pour la réponse de Claude
+DOSSIER_SORTIE = os.path.join(r"C:\Users\E.BENAMOR\Desktop\projetTravailler", AFFAIRE, "rapport")
 
 def echapper(texte):
     """Protège les caractères spéciaux de pywinauto (accolades, +, ^, %, ~, parenthèses)."""
@@ -358,31 +378,44 @@ def noms_boutons(fenetre):
     return Counter(c.window_text().strip() for c in boutons_claude(fenetre) if c.window_text().strip())
 
 
-def attendre_pdf_produit(fenetre, timeout, avant):
-    """Attend le bouton de téléchargement du PDF de la dernière réponse (les images sont ignorées)."""
-    fin = time.time() + timeout
-    while time.time() < fin:
-        actuels = boutons(fenetre)
-        compte_actuel = Counter(c.window_text().strip() for c in actuels if c.window_text().strip())
-        candidats = []
-        for c in actuels:
-            nom = c.window_text().strip()
-            low = normaliser(nom)
-            if not nom or "marquer" in low or "non lu" in low or "image" in low:
-                continue
-            if not any(m in low for m in ("telecharg", "download")):
-                continue
-            nouveau = compte_actuel[nom] > avant.get(nom, 0)
-            if nouveau or "ouvrir" in low:
-                candidats.append(c)
-        if candidats:
-            # le plus bas à l'écran = réponse la plus récente
-            return sorted(candidats, key=lambda b: b.rectangle().top, reverse=True)[0]
-        time.sleep(3)
-    return None
+EXTENSIONS = ("*.pdf", "*.xlsx")
 
-def chercher_pdf_recent(debut):
-    """Cherche les PDF modifiés après « debut » dans les dossiers probables."""
+
+def boutons_telechargement(fenetre):
+    """Tous les boutons « Télécharger… » de la discussion (images exclues)."""
+    resultat = []
+    for c in boutons(fenetre):
+        low = normaliser(c.window_text().strip())
+        if not low or "image" in low:
+            continue
+        if low.startswith(("telecharg", "download")):  # exclut « Plus d'options pour … download … »
+            resultat.append(c)
+    return resultat
+
+
+def attendre_tous_les_fichiers(fenetre, timeout, stabilite=120):
+    """Attend que le nombre de boutons de téléchargement reste stable pendant « stabilite » s."""
+    fin = time.time() + timeout
+    nb_prec, depuis = -1, time.time()
+    dernier_message = 0
+    while time.time() < fin:
+        liste = boutons_telechargement(fenetre)
+        if len(liste) != nb_prec:
+            nb_prec, depuis = len(liste), time.time()
+            print(f"{datetime.now():%H:%M:%S} – {len(liste)} fichier(s) détecté(s).")
+            dernier_message = time.time()
+        elif liste and time.time() - depuis >= stabilite:
+            return sorted(liste, key=lambda b: b.rectangle().top)
+        if time.time() - dernier_message >= 60:  # message d'attente toutes les minutes
+            etat = "vérification que la réponse est finie" if liste else "réponse en cours"
+            print(f"{datetime.now():%H:%M:%S} – {etat}, {len(liste)} fichier(s) détecté(s).")
+            dernier_message = time.time()
+        time.sleep(3)
+    return []
+
+
+def chercher_fichiers_recents(debut, deja):
+    """Cherche les PDF/XLSX modifiés après « debut », hors fichiers déjà récupérés."""
     dossiers = [
         dossier_telechargements(),
         Path(os.environ.get("TEMP", r"C:\Windows\Temp")),
@@ -393,17 +426,36 @@ def chercher_pdf_recent(debut):
     for d in dossiers:
         if not d.exists():
             continue
-        try:
-            fichiers = list(d.glob("*.pdf")) + list(d.glob("*/*.pdf"))
-        except Exception:
-            continue
-        for f in fichiers:
+        for motif in EXTENSIONS:
             try:
-                if f.stat().st_mtime >= debut - 2 and not Path(str(f) + ".crdownload").exists():
-                    trouves.append(f)
+                fichiers = list(d.glob(motif)) + list(d.glob("*/" + motif))
             except Exception:
                 continue
+            for f in fichiers:
+                try:
+                    if (f not in deja and not f.name.startswith("~$")
+                            and f.stat().st_mtime >= debut - 2
+                            and not Path(str(f) + ".crdownload").exists()):
+                        trouves.append(f)
+                except Exception:
+                    continue
     return sorted(trouves, key=lambda f: f.stat().st_mtime, reverse=True)
+
+
+def attendre_nouveau_fichier(debut, deja, timeout=30):
+    """Attend un nouveau fichier téléchargé et la fin de son écriture."""
+    fin = time.time() + timeout
+    while time.time() < fin:
+        time.sleep(2)
+        trouves = chercher_fichiers_recents(debut, deja)
+        if trouves:
+            f = trouves[0]
+            taille = -1
+            while taille != f.stat().st_size:
+                taille = f.stat().st_size
+                time.sleep(1)
+            return f
+    return None
 
 def nom_unique(dossier, nom):
     """Renvoie un chemin qui n'existe pas encore (ajoute _2, _3... si besoin)."""
@@ -414,38 +466,69 @@ def nom_unique(dossier, nom):
         compteur += 1
     return cible
 
-def enregistrer_pdf_produit(fenetre, avant):
+def nom_propre(source):
+    """Retire le suffixe _1, _2… ajouté au téléchargement quand le nom existait déjà."""
+    m = re.match(r"^(.*)_\d+$", source.stem)
+    if m and (source.parent / (m.group(1) + source.suffix)).exists():
+        return m.group(1) + source.suffix
+    return source.name
+
+
+def empreinte(chemin):
+    return hashlib.md5(Path(chemin).read_bytes()).hexdigest()
+
+
+def cliquer_bouton(fenetre, bouton):
+    """Fait défiler jusqu'au bouton puis clique à la souris (invoke() échoue hors écran)."""
+    fenetre.set_focus()  # Excel ou Acrobat a pu prendre le focus au clic précédent
+    try:
+        bouton.iface_scroll_item.ScrollIntoView()
+    except Exception:
+        pass
+    time.sleep(1)
+    try:
+        bouton.click_input()
+    except Exception:
+        bouton.invoke()
+
+
+def enregistrer_fichiers_produits(fenetre):
     os.makedirs(DOSSIER_SORTIE, exist_ok=True)
 
-    bouton = attendre_pdf_produit(fenetre, DELAI_REPONSE, avant)
-    if bouton is None:
-        print("Bouton de téléchargement introuvable. Boutons visibles :")
+    liste = attendre_tous_les_fichiers(fenetre, DELAI_REPONSE)
+    if not liste:
+        print("Aucun bouton de téléchargement trouvé. Boutons visibles :")
         for c in boutons(fenetre):
             if c.window_text():
                 print(" -", repr(c.window_text()))
         return
 
-    print("Bouton trouvé :", repr(bouton.window_text()))
-    time.sleep(5)
-    debut = time.time()
-    bouton.click_input()
-    print("Clic effectué. Recherche du PDF (Téléchargements, dossier temporaire, Bureau, Documents)...")
-
-    trouves = []
-    fin = time.time() + 120
-    while time.time() < fin and not trouves:
+    total = len(liste)
+    print(f"{total} fichier(s) à télécharger.")
+    deja = set()
+    copies = set()  # empreintes des fichiers déjà copiés (évite les doublons)
+    for i in range(1, total + 1):
+        # liste relue à chaque tour : elle peut changer après un clic ou un défilement
+        liste = sorted(boutons_telechargement(fenetre), key=lambda b: b.rectangle().top)
+        if i > len(liste):
+            print(f"[{i}/{total}] Bouton disparu.")
+            continue
+        debut = time.time()
+        cliquer_bouton(fenetre, liste[i - 1])
+        source = attendre_nouveau_fichier(debut, deja)
+        if source is None:
+            print(f"[{i}/{total}] Aucun fichier trouvé après le clic.")
+            continue
+        deja.add(source)
+        h = empreinte(source)
+        if h in copies:
+            print(f"[{i}/{total}] {source.name} : doublon ignoré.")
+            continue
+        copies.add(h)
+        destination = nom_unique(Path(DOSSIER_SORTIE), nom_propre(source))
+        shutil.copy2(str(source), str(destination))
+        print(f"[{i}/{total}] {source.name} -> {destination}")
         time.sleep(2)
-        trouves = chercher_pdf_recent(debut)
-
-    if not trouves:
-        print("Aucun PDF trouvé après le clic.")
-        return
-
-    source = trouves[0]
-    print("PDF trouvé :", source)
-    destination = nom_unique(Path(DOSSIER_SORTIE), f"Comparaison_{datetime.now():%Y%m%d_%H%M}.pdf")
-    shutil.copy2(str(source), str(destination))
-    print("PDF copié vers :", destination)
 
 
 if __name__ == "__main__":
@@ -461,7 +544,6 @@ if __name__ == "__main__":
         joindre_pdf(fenetre, chemin)
     fenetre.set_focus()
     print("Les fichiers sont joints. Écriture du prompt...")
-    avant = noms_boutons(fenetre)  # photo des boutons avant l'envoi
     envoyer_prompt(fenetre)
     print(f"Message envoyé. Attente de la réponse (jusqu'à {DELAI_REPONSE} s)...")
-    enregistrer_pdf_produit(fenetre, avant)
+    enregistrer_fichiers_produits(fenetre)
