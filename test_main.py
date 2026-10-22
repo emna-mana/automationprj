@@ -159,30 +159,3 @@
 #         f.write(buffer.getvalue())
 #     print("Arborescence enregistrée dans boite_pdf.txt")
 #------------------------------------------------------------------------------
-from pywinauto import Desktop
-import time
-import io
-from contextlib import redirect_stdout
-
-desktop = Desktop(backend="uia")
-steel = desktop.window(title_re=".*Steel Projects.*")
-cam3d = steel.child_window(auto_id="FormImport", control_type="Window")
-
-# Clic sur la flèche du répertoire (le dialogue Import [CAM3D] doit être ouvert)
-fleche = cam3d.child_window(auto_id="ptbLocalFolder", control_type="Pane").child_window(control_type="Button")
-fleche.click_input()
-time.sleep(2)
-
-buffer = io.StringIO()
-with redirect_stdout(buffer):
-    print("== Liste des dossiers (SysListView32) ==")
-    for w in desktop.windows(class_name="SysListView32"):
-        desktop.window(handle=w.handle).print_control_identifiers()
-
-    print("\n== Fenêtre sans titre (WinForms) ==")
-    for w in desktop.windows(class_name="WindowsForms10.Window.8.app.0.34f5582_r8_ad1"):
-        desktop.window(handle=w.handle).print_control_identifiers()
-
-with open("tmp_popup.txt", "w", encoding="utf-8") as f:
-    f.write(buffer.getvalue())
-print("Écrit dans tmp_popup.txt")

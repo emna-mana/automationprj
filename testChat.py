@@ -59,7 +59,7 @@ PROMPT_LIGNES = [
     "Ne proposer aucune substitution sans justification technique.",
 ]
 
-DELAI_REPONSE = 1800  # secondes d'attente maximale pour la réponse de ChatGPT
+DELAI_REPONSE = 1800 
 DOSSIER_SORTIE = r"C:\Users\E.BENAMOR\Desktop\Comparaison TEKLA et PLM"
 
 

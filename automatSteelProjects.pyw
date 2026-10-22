@@ -1,28 +1,28 @@
-import ctypes
 import logging
-import operator
 import os
 import queue
+import sys
 import threading
 import tkinter as tk
-from datetime import datetime
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 import comtypes
-from _ctypes import COMError
-from pywinauto import Desktop
-from pywinauto.application import Application
 from pywinauto.keyboard import send_keys
-from pywinauto.timings import TimeoutError as DelaiDepasse
 from pywinauto.timings import wait_until
-from pywinauto.uia_defines import get_elem_interface
+
+import claude
+import affectation_machine
+import corection_scribing
+import pp
+from conversion_fer_plat import convertir_fers_plats
 
 # ===== CONFIGURATION (valeurs par défaut, modifiables dans l'interface) =====
 USERNAME = "EBA"
 PASSWORD = "EBA2026"
+
 EXE_PATH = r"C:\Program Files (x86)\SteelProjects\Sp.Plm\Sp.Plm.exe"
-DOSSIER_PROJETS_DEFAUT = r"C:/Users/E.BENAMOR/Desktop/PROJETS"
+DOSSIER_PROJETS_DEFAUT = r"C:/Users/E.BENAMOR/Desktop/projetsAtravailler"
 
 PHASE_MIN = 130
 PHASE_MAX = 140
@@ -31,13 +31,16 @@ COMMENTAIRE_2 = "PU"
 PHASE_SEUIL_GR = 700     # phases strictement supérieures à ce seuil
 COMMENTAIRE_GR = "GR"    # commentaire 2 des repères secondaires dont le profil contient « _ »
 
-NOM_DOSSIER_PDF = "Impressions Steel Projects"
+DOSSIER_PROJETS_TRAVAILLER = claude.DOSSIER_PROJETS  # même dossier que celui lu par claude
+
+COMPARAISON_CLAUDE = True    # comparaison avec Claude après l'impression
+CORRECTION_SCRIBING = True   # correction du scribing des repères « _ » (Ctrl+D)
+AFFECTATION_MACHINE = True   # affectation depuis le classeur de Claude
+CONVERSION_FERS_PLATS = True # conversion des tôles retenues en fers plats
+
 FICHIER_LOG = "workflow_steel_projects.log"
 
-DESKTOP = Desktop(backend="uia")
-
 # Titres des fenêtres (regroupés ici pour être corrigés facilement)
-TITRE_APERCU = r"Aper.u \d+/\d+"
 TITRE_GESTION_AFFAIRES = "Gestion d'Affaires"
 
 log = logging.getLogger("workflow")
@@ -67,532 +70,20 @@ def configurer_journal(messages):
     log.addHandler(fenetre)
 
 
-# ===== OUTILS =====
-def echapper_keys(texte):
-    # Entoure de accolades les caractères spéciaux de type_keys pour qu'ils soient tapés tels quels
-    return "".join("{" + c + "}" if c in "+^%~(){}[]" else c for c in texte)
-
-
-def attendre(ctrl, etat="exists visible enabled", timeout=30):
-    # Attend qu'un contrôle soit dans l'état voulu, puis le renvoie
-    ctrl.wait(etat, timeout=timeout, retry_interval=0.2)
-    return ctrl
-
-
-def cliquer(ctrl, timeout=30):
-    # Attend qu'un contrôle soit cliquable, puis clique dessus
-    attendre(ctrl, timeout=timeout).click_input()
-
-
-def cliquer_menu(bouton, texte, timeout=30):
-    # Attend qu'un élément de menu apparaisse sous le bouton, puis clique dessus
-    item = wait_until(
-        timeout, 0.2,
-        lambda: next((x for x in bouton.wrapper_object().descendants(control_type="MenuItem")
-                      if x.window_text() == texte), None),
-        None, operator.is_not,
-    )
-    item.click_input()
-
-
-def attendre_appli(window, timeout=30):
-    # Attend que l'application ait fini de travailler (CPU au repos)
-    pid = window.wrapper_object().process_id()
-    app = Application(backend="uia").connect(process=pid)
-    app.wait_cpu_usage_lower(threshold=5, timeout=timeout)
-
-
-def valider_comparaison(window):
-    # Si la fenêtre de comparaison de profils est ouverte, clique sur Ok
-    comparaison = window.child_window(auto_id="FormProfileComparison", control_type="Window")
-    if not comparaison.exists(timeout=0):
-        return False
-    barre = comparaison.child_window(auto_id="stateBar", control_type="Pane")
-    attendre(barre.child_window(title="Ok", control_type="Button")).invoke()
-    comparaison.wait_not("exists", timeout=30, retry_interval=0.2)
-    log.info("Comparaison de profils validée")
-    return True
-
-
-def cliquer_avec_comparaison(window, ctrl, timeout=30):
-    # Attend que ctrl soit cliquable ; valide la comparaison de profils si elle apparaît.
-    # Les erreurs UIA temporaires (appli occupée) sont ignorées et l'attente continue.
-    def pret():
-        try:
-            if valider_comparaison(window):
-                return False
-            return ctrl.exists(timeout=0) and ctrl.is_visible() and ctrl.is_enabled()
-        except COMError:
-            return False
-
-    wait_until(timeout, 0.5, pret)
-    ctrl.click_input()
-
-
-def trouver_grille(window, colonne="Phase", timeout=30):
-    # Plusieurs tables « dgvData » peuvent exister : garde la visible qui a la colonne demandée
-    # (si plusieurs conviennent, prend celle qui a le plus de lignes)
-    def chercher():
-        try:
-            candidates = []
-            for g in window.wrapper_object().descendants(control_type="Table"):
-                if g.automation_id() != "dgvData" or not g.is_visible():
-                    continue
-                lignes = [l for l in g.children(control_type="Custom") if l.window_text() != "Ligne du haut"]
-                if lignes and any(c.window_text().startswith(colonne + " ")
-                                  for c in lignes[0].children(control_type="Edit")):
-                    candidates.append((len(lignes), g))
-            if not candidates:
-                return None
-            return max(candidates, key=lambda x: x[0])[1]
-        except COMError:
-            return None
-
-    return wait_until(timeout, 0.5, chercher, None, operator.is_not)
-
-
-def focus_premiere_ligne(grille):
-    # Donne le focus clavier à la grille en sélectionnant sa 1re ligne (sans souris)
-    for ligne in grille.children(control_type="Custom"):
-        if ligne.window_text() != "Ligne du haut":
-            legacy = get_elem_interface(ligne.element_info.element, "LegacyIAccessible")
-            legacy.Select(0x3)  # remplace la sélection + donne le focus à la grille
-            return True
-    return False
-
-
-def valeur_cellule(ligne, colonne):
-    # Valeur de la cellule de « colonne » dans une ligne (cellule nommée « <colonne> Ligne N, ... »)
-    for c in ligne.children(control_type="Edit"):
-        if c.window_text().startswith(colonne + " "):
-            return (c.get_value() or "").strip()
-    return ""
-
-
-def selectionner_lignes(grille, colonne, condition):
-    # Sélectionne les lignes dont la cellule vérifie la condition, SANS souris
-    # (sélection d'accessibilité) : fonctionne aussi pour les lignes hors de l'écran
-    n = 0
-    for ligne in grille.children(control_type="Custom"):
-        if ligne.window_text() == "Ligne du haut":
-            continue
-        if condition(valeur_cellule(ligne, colonne)):
-            legacy = get_elem_interface(ligne.element_info.element, "LegacyIAccessible")
-            # 1re ligne : remplace la sélection et donne le focus (0x2 + 0x1)
-            # lignes suivantes : ajout à la sélection (0x8)
-            legacy.Select(0x3 if n == 0 else 0x8)
-            n += 1
-    return n
-
-
-def afficher_colonne(grille, colonne):
-    # Diagnostic : affiche la valeur de la colonne pour chaque ligne de la grille
-    for ligne in grille.children(control_type="Custom"):
-        if ligne.window_text() != "Ligne du haut":
-            log.info("  %s | %s = %r", ligne.window_text(), colonne, valeur_cellule(ligne, colonne))
-
-
-def remplir_commentaire_2(window, texte):
-    # Fenêtre d'édition des repères (ouverte par Entrée) : écrit texte dans Commentaire 2, valide, quitte
-    repere = window.child_window(auto_id="SpForm", control_type="Window")
-    attendre(repere, "exists visible")
-
-    onglets = repere.child_window(auto_id="tsGeneral", control_type="Pane")
-    cliquer(onglets.child_window(control_type="TreeItem", found_index=3))
-
-    com2 = attendre(repere.child_window(auto_id="tbCom2", control_type="Edit"))
-    com2.click_input()
-    com2.type_keys("^a{BACKSPACE}" + echapper_keys(texte), with_spaces=True)
-
-    cliquer(repere.child_window(title="Valider", control_type="Button"))
-    cliquer(repere.child_window(title="Quitter", control_type="Button"))
-    repere.wait_not("exists", timeout=30, retry_interval=0.2)
-
-
-def focus_grille_haut(window, timeout=30):
-    # Met le focus clavier dans la grille visible du haut (zone Affaire / Plan / RP / RS)
-    # en cliquant sur l'en-tête de la première ligne
-    zone = window.child_window(auto_id="pnlAffairePlanRpRs", control_type="Pane")
-
-    def entete_premiere_ligne():
-        try:
-            for g in zone.wrapper_object().descendants(control_type="Table"):
-                if g.automation_id() != "dgvData" or not g.is_visible():
-                    continue
-                for ligne in g.children(control_type="Custom"):
-                    if ligne.window_text() == "Ligne du haut":
-                        continue
-                    entetes = ligne.children(control_type="Header")
-                    if entetes:
-                        return entetes[0]
-        except COMError:
-            pass  # appli occupée : on réessaie
-        return None
-
-    entete = wait_until(timeout, 0.5, entete_premiere_ligne, None, operator.is_not)
-    entete.click_input()
-
-
-def dossier_pdf():
-    # Chemin réel du Bureau (fonctionne aussi si le Bureau est redirigé vers OneDrive),
-    # puis création du sous-dossier des PDF s'il n'existe pas
-    buf = ctypes.create_unicode_buffer(260)
-    ctypes.windll.shell32.SHGetFolderPathW(None, 0x10, None, 0, buf)  # 0x10 = Bureau
-    dossier = os.path.join(buf.value, NOM_DOSSIER_PDF)
-    os.makedirs(dossier, exist_ok=True)
-    return dossier
-
-
-def enregistrer_pdf(affaire, timeout=120):
-    # Remplit la boîte « Enregistrer le fichier PDF sous » :
-    # nom = affaire + date/heure, dans le dossier du Bureau, puis vérifie le fichier créé
-    dossier = dossier_pdf()
-    horodatage = datetime.now().strftime("%Y%m%d_%H%M")
-    chemin = os.path.join(dossier, f"{affaire}_{horodatage}.pdf")
-
-    boite = DESKTOP.window(title="Enregistrer le fichier PDF sous")
-    attendre(boite, "exists visible", timeout=timeout)
-    handle = boite.wrapper_object().handle
-    boite = DESKTOP.window(handle=handle)
-
-    # Champ « Nom du fichier » (control_type obligatoire : la barre d'adresse a aussi l'auto_id 1001)
-    nom = attendre(boite.child_window(auto_id="1001", control_type="Edit"))
-    nom.click_input()
-    nom.type_keys("^a{BACKSPACE}" + echapper_keys(chemin), with_spaces=True)
-
-    # Vérifie que le champ contient bien le chemin complet avant d'enregistrer
-    wait_until(10, 0.2, lambda: (nom.get_value() or "") == chemin)
-
-    cliquer(boite.child_window(auto_id="1", control_type="Button"))  # Enregistrer
-    # Attend la fermeture de la boîte
-    wait_until(60, 0.2, lambda: not ctypes.windll.user32.IsWindow(handle))
-
-    # Vérifie que le PDF a bien été créé
-    wait_until(300, 1, lambda: os.path.exists(chemin))
-    log.info("PDF enregistré : %s", chemin)
-    return chemin
-
-
-# ===== ÉTAPES =====
-def lancer_application(timeout=90):
-    # Lance Steel Projects et renvoie la fenêtre qui affiche l'écran de connexion
-    Application(backend="uia").start(f'"{EXE_PATH}"')
-
-    def fenetre_connexion():
-        # Parmi toutes les fenêtres « Steel Projects », garde celle qui contient « Identification »
-        for w in DESKTOP.windows(title_re=".*Steel Projects.*"):
-            spec = DESKTOP.window(handle=w.handle)
-            if spec.child_window(auto_id="SelectUser", control_type="Window").exists(timeout=0):
-                return spec
-        return None
-
-    return wait_until(timeout, 1, fenetre_connexion, None, operator.is_not)
-
-
-def s_authentifier(window):
-    # Saisit l'identifiant et le mot de passe dans la fenêtre « Identification », puis valide
-    ident = window.child_window(auto_id="SelectUser", control_type="Window")
-    attendre(ident, "exists visible", timeout=90)
-
-    attendre(ident.child_window(auto_id="tbLogin", control_type="Edit")).set_edit_text(USERNAME)
-    attendre(ident.child_window(auto_id="tbPassword", control_type="Edit")).set_edit_text(PASSWORD)
-
-    barre = ident.child_window(auto_id="StatusBar", control_type="Pane")
-    attendre(barre.child_window(title="Ok", control_type="Button")).invoke()
-
-    ident.wait_not("exists visible", timeout=60, retry_interval=0.5)
-
-    splash = window.child_window(auto_id="FormSplashScreen", control_type="Window")
-    splash.wait_not("exists", timeout=180, retry_interval=0.5)
-    attendre_appli(window, timeout=120)
-    log.info("Connexion réussie")
-
-
-def importer_tekla(window, dossier_projet):
-    # Importe les fichiers XML Tekla du projet donné et valide les fenêtres d'import
-    chemin_xml = os.path.join(dossier_projet, "*.XML")
-
-    bouton_import = window.child_window(title="Import", control_type="Button")
-    cliquer(bouton_import)
-    cliquer_menu(bouton_import, "TEKLA_XML")
-
-    tekla = DESKTOP.window(title_re=".*Importation Tekla.*")
-    attendre(tekla, "exists visible")
-
-    repertoire = tekla.child_window(title="Répertoire", auto_id="1001", control_type="Edit")
-    attendre(repertoire).click_input()
-    repertoire.set_edit_text("")
-    repertoire.type_keys(echapper_keys(chemin_xml), with_spaces=True)
-    cliquer(tekla.child_window(title="Ok", auto_id="1", control_type="Button"))
-
-    ok_validation = window.child_window(title="Ok", control_type="Button", best_match="Button3")
-    cliquer_avec_comparaison(window, ok_validation, timeout=600)
-    cliquer_avec_comparaison(window, window.child_window(title="Ajouter", control_type="Button"), timeout=3600)
-    cliquer_avec_comparaison(window, ok_validation, timeout=3600)
-
-    finir_import(window)
-
-
-def finir_import(window, timeout=3600):
-    # Attend la fin de l'import (la comparaison de profils est validée si elle apparaît),
-    # puis clique sur Ok final
-    dialog = window.child_window(auto_id="FormConfigLog", control_type="Window")
-    barre_ok = dialog.child_window(auto_id="bar1", control_type="ToolBar")
-    ok_final = barre_ok.child_window(title="Ok", control_type="Button")
-
-    cliquer_avec_comparaison(window, ok_final, timeout=timeout)
-    dialog.wait_not("exists", timeout=60, retry_interval=0.2)
-
-
-def ouvrir_gestion_production(window):
-    # Ouvre l'écran Gestion de production
-    cliquer(window.child_window(title="Gestion de production", control_type="Button"))
-    toolbar = window.child_window(auto_id="toolBar", control_type="ToolBar", found_index=0)
-    attendre(toolbar, "exists visible", timeout=60)
-
-
-def quitter_gestion_production(window, timeout=60):
-    # Ferme l'écran Gestion de production (Ctrl+Q) et vérifie qu'il est bien fermé
-    attendre_appli(window)
-    window.set_focus()
-    send_keys("^q")
-    try:
-        wait_until(timeout, 0.5, lambda: "Gestion de production" not in window.window_text())
-    except DelaiDepasse:
-        raise RuntimeError("L'écran Gestion de production ne s'est pas fermé avec Ctrl+Q")
-    attendre_appli(window)
-
-
-def ouvrir_gestion_affaires(window):
-    # Ouvre l'écran Gestion d'Affaires et attend qu'il soit réellement chargé
-    window.set_focus()
-    cliquer(window.child_window(title="Gestion d'Affaires", control_type="Button"))
-    wait_until(120, 0.5, lambda: "Gestion d'Affaires" in window.window_text())
-    attendre_appli(window, timeout=120)
-
-
-def filtrer_par_affaire(window, affaire, timeout=30):
-    # Filtre la liste sur l'affaire donnée (nom du sous-dossier du projet)
-    window.set_focus()
-    send_keys("^{F3}")
-    attendre_appli(window)
-
-    def champ_filtre():
-        # Premier champ de saisie d'une barre « toolBar » visible
-        try:
-            for tb in window.wrapper_object().descendants(control_type="ToolBar"):
-                if tb.automation_id() == "toolBar" and tb.is_visible():
-                    edits = tb.children(control_type="Edit")
-                    if edits and edits[0].is_visible():
-                        return edits[0]
-        except COMError:
-            pass  # appli occupée : on réessaie
-        return None
-
-    filtre = wait_until(timeout, 0.5, champ_filtre, None, operator.is_not)
-    filtre.click_input()
-    filtre.type_keys("^a{BACKSPACE}" + echapper_keys(affaire) + "{ENTER}", with_spaces=True)
-    attendre_appli(window)
-
-
-def filtre_par_phase(window):
-    # Passe sur la vue Phase (Ctrl+F4)
-    window.set_focus()
-    send_keys("^{F4}")
-    attendre_appli(window)
-
-
-def filtrer_parrepere_secondaire(window):
-    # Passe sur la vue Repère secondaire (Ctrl+F6)
-    window.set_focus()
-    send_keys("^{F6}")
-
-
-def ajouter_scribing(window):
-    # Ajoute le scribing à toutes les pièces et attend la fin du traitement
-    window.set_focus()
-    send_keys("^a")
-    window.right_click_input()
-    attendre_appli(window)
-    send_keys("{DOWN 10}{ENTER}")
-    attendre_appli(window)
-    send_keys("{DOWN 11}{ENTER}")
-
-    cliquer(window.child_window(auto_id="cbxAddPositioningMark", control_type="Pane"))
-    cliquer(window.child_window(title="Ok", control_type="Button"))
-    cliquer(window.child_window(title_re="Appliquer . tous", control_type="Pane"), timeout=600)
-    cliquer(window.child_window(title="Non", control_type="Button"))
-
-    barre = window.child_window(auto_id="barStatus", control_type="Pane")
-    annuler = barre.child_window(title="Annuler", control_type="Button")
-    annuler.wait("exists visible", timeout=30)
-    annuler.wait_not("exists visible", timeout=18000, retry_interval=1)
-
-
-def selectionner_phases(window):
-    # Sélectionne les lignes dont la phase est entre PHASE_MIN et PHASE_MAX
-    grille = trouver_grille(window)
-
-    premiere = True
-    for ligne in grille.children(control_type="Custom"):
-        if ligne.window_text() == "Ligne du haut":
-            continue
-
-        phase = ""
-        for c in ligne.children(control_type="Edit"):
-            if c.window_text().startswith("Phase "):
-                phase = (c.get_value() or "").strip()
-
-        if phase.isdigit() and PHASE_MIN <= int(phase) < PHASE_MAX:
-            case = ligne.children(control_type="Header")[0]
-            if premiere:
-                case.click_input()
-                premiere = False
-            else:
-                case.click_input(pressed="control")
-            log.info("Phase sélectionnée : %s", phase)
-
-    if premiere:
-        log.info("Aucune phase entre %s et %s", PHASE_MIN, PHASE_MAX)
-
-
-def modifier_repere_secondaire(window):
-    # Écrit COMMENTAIRE_2 dans tous les repères secondaires
-    attendre_appli(window)
-    send_keys("^{F6}")
-    attendre_appli(window)
-
-    grille = trouver_grille(window, "Profil")
-    focus_premiere_ligne(grille)
-    send_keys("^a{ENTER}")
-    remplir_commentaire_2(window, COMMENTAIRE_2)
-
-
-def commentaire_gr(window):
-    # Phases > PHASE_SEUIL_GR, puis repères secondaires dont le profil contient « _ » : Commentaire 2 = GR
-    filtre_par_phase(window)
-    grille = trouver_grille(window, "Phase")
-    log.info("--- Phases lues ---")
-    afficher_colonne(grille, "Phase")
-
-    n = selectionner_lignes(grille, "Phase", lambda v: v.isdigit() and int(v) >= PHASE_SEUIL_GR)
-    log.info("%d phase(s) >= %s sélectionnée(s)", n, PHASE_SEUIL_GR)
-    if n == 0:
-        return
-
-    attendre_appli(window)
-    send_keys("^{F6}")
-    attendre_appli(window)
-
-    grille = trouver_grille(window, "Profil")
-    log.info("--- Profils lus ---")
-    afficher_colonne(grille, "Profil")
-
-    n = selectionner_lignes(grille, "Profil", lambda v: "_" in v)
-    log.info("%d repère(s) secondaire(s) avec « _ » dans le profil", n)
-    if n == 0:
-        return
-
-    send_keys("{ENTER}")
-    remplir_commentaire_2(window, COMMENTAIRE_GR)
-
-def lister_apercus():
-    # Toutes les fenêtres « Aperçu x/y » ouvertes (il peut y en avoir plusieurs)
-    try:
-        return DESKTOP.windows(title_re=TITRE_APERCU, top_level_only=True)
-    except Exception:
-        return []
-
-
-def fermer_toutes_apercus(timeout=60):
-    # Ferme toutes les fenêtres « Aperçu x/y », sans jamais s'appuyer sur une fenêtre unique
-    handles = [w.handle for w in lister_apercus()]
-    if not handles:
-        log.info("Aucune fenêtre d'aperçu à fermer")
-        return
-
-    log.info("%d fenêtre(s) d'aperçu à fermer", len(handles))
-    for handle in handles:
-        try:
-            DESKTOP.window(handle=handle).wrapper_object().close()  # demande la fermeture (WM_CLOSE)
-            wait_until(timeout, 0.5, lambda h=handle: not ctypes.windll.user32.IsWindow(h))
-        except Exception:
-            # La fenêtre a pu se fermer toute seule entre-temps : on continue
-            log.info("Fenêtre d'aperçu déjà fermée ou non fermable (handle %s)", handle)
-    log.info("Fenêtre(s) d'aperçu traitée(s)")
-
-
-def fermer_apercu(timeout=60):
-    # Ferme les fenêtres « Aperçu » ouvertes par Action, une fois le PDF enregistré
-    fermer_toutes_apercus(timeout)
-
-
-def impression(window, affaire):
-    # Ouvre Gestion d'Affaires, filtre sur l'affaire, sélectionne tout, Fiche de débit + Action, puis PDF
-    ouvrir_gestion_affaires(window)
-    filtrer_par_affaire(window, affaire)
-    filtrer_parrepere_secondaire(window)
-    attendre_appli(window)
-
-    # Nettoyage : aucune fenêtre d'aperçu résiduelle avant d'en ouvrir une nouvelle
-    fermer_toutes_apercus()
-
-    focus_grille_haut(window)
-    send_keys("^a")
-    attendre_appli(window)
-
-    # Mettre en sélection : raccourci Maj+Inser
-    window.set_focus()
-    send_keys("+{INSERT}")
-    attendre_appli(window)
-
-    barre_droite = window.child_window(auto_id="barDroite", control_type="Pane")
-    fiche_debit = barre_droite.child_window(control_type="Button", found_index=0)
-    action = barre_droite.child_window(control_type="Button", found_index=5)
-    attendre(action, "exists visible")
-
-    # Action grisée = Fiche de débit non sélectionnée : on la sélectionne d'abord
-    if not action.is_enabled():
-        cliquer(fiche_debit)
-        action.wait("enabled", timeout=30, retry_interval=0.2)
-
-    cliquer(action)
-    attendre_appli(window)
-
-    # Fenêtre « Aperçu x/y » ouverte par Action : on prend la plus récente (évite l'ambiguïté)
-    apercus = wait_until(60, 0.5, lambda: lister_apercus() or None, None, operator.is_not)
-    if len(apercus) > 1:
-        log.warning("%d fenêtres d'aperçu détectées, la dernière est utilisée", len(apercus))
-    apercu = DESKTOP.window(handle=apercus[-1].handle)
-    attendre(apercu, "exists visible", timeout=60)
-
-    # Fichier > Imprimer tout
-    menu = apercu.child_window(title="Application", control_type="MenuBar")
-    cliquer(menu.child_window(title="Fichier", control_type="MenuItem"))
-
-    # « Imprimer tout » : ID de commande MFC 32775 (le menu apparaît deux fois dans l'arborescence)
-    imprimer_tout = apercu.child_window(auto_id="32775", control_type="MenuItem", found_index=0)
-    cliquer(imprimer_tout)
-    enregistrer_pdf(affaire)
-
-
-def revenir_steel_projects(window):
-    # Redonne le focus à la fenêtre principale Steel Projects
-    window.set_focus()
-    attendre_appli(window)
-
-
-def quitter_gestion_affaires(window, timeout=60):
-    # Ferme l'écran Gestion d'Affaires (Ctrl+Q) et contrôle le titre
-    attendre_appli(window)
-    window.set_focus()
-    send_keys("^q")
-    try:
-        wait_until(timeout, 0.5, lambda: TITRE_GESTION_AFFAIRES not in window.window_text())
-    except DelaiDepasse:
-        raise RuntimeError("L'écran Gestion d'Affaires ne s'est pas fermé avec Ctrl+Q")
-    attendre_appli(window)
-    log.info("Gestion d'Affaires fermée")
+class FluxVersJournal:
+    # Remplace sys.stdout : chaque ligne écrite par print (ex. claude) part dans le journal
+    def __init__(self):
+        self.tampon = ""
+
+    def write(self, texte):
+        self.tampon += texte
+        while "\n" in self.tampon:
+            ligne, self.tampon = self.tampon.split("\n", 1)
+            if ligne.strip():
+                log.info(ligne)
+
+    def flush(self):
+        pass
 
 
 # ===== WORKFLOW PAR PROJET =====
@@ -613,21 +104,49 @@ def lister_projets(dossier_racine):
 def traiter_projet(window, dossier_projet):
     # Enchaîne toutes les étapes pour UN projet (une affaire)
     affaire = os.path.basename(dossier_projet)
+    pp.AFFAIRE = affaire
     log.info("=== Début du projet %s ===", affaire)
 
-    importer_tekla(window, dossier_projet)
-    ouvrir_gestion_production(window)
-    filtrer_par_affaire(window, affaire)
-    filtre_par_phase(window)
-    ajouter_scribing(window)
-    selectionner_phases(window)
-    modifier_repere_secondaire(window)
-    commentaire_gr(window)
-    quitter_gestion_production(window)
-    impression(window, affaire)
-    fermer_apercu()
-    revenir_steel_projects(window)
-    quitter_gestion_affaires(window)
+    pp.importer_tekla(window, dossier_projet)
+    pp.ouvrir_gestion_production(window)
+    pp.filtrer_par_affaire(window)
+    pp.filtre_par_phase(window)
+    pp.ajouter_scribing(window)
+    pp.selectionner_phases(window)
+    pp.modifier_repere_secondaire(window)
+    pp.commentaire_gr(window)
+    pp.quitter_gestion_production(window)
+    pp.fermer_apercu()
+    chemin_pdf = pp.impression(window)
+    pp.fermer_pdf_ouverts(chemin_pdf)
+    pp.fermer_apercu()
+    pp.revenir_steel_projects(window)
+    pp.quitter_gestion_affaires(window)
+
+    # Comparaison avec Claude, une fois l'impression terminée et Steel Projects revenu à l'accueil
+    if COMPARAISON_CLAUDE:
+        log.info("=== Comparaison avec Claude ===")
+        fichiers = claude.comparer_avec_claude(
+            claude.fichiers_affaire(affaire, chemin_pdf),
+            claude.dossier_sortie_affaire(affaire),
+        )
+        # Visionneuses (Acrobat, Excel) ouvertes par les téléchargements : elles cachaient Steel Projects
+        pp.fermer_visionneuses(fichiers)
+        pp.revenir_steel_projects(window)  # Claude avait pris le focus
+
+    if CORRECTION_SCRIBING or AFFECTATION_MACHINE or CONVERSION_FERS_PLATS:
+        pp.ouvrir_gestion_production(window)
+        pp.filtrer_par_affaire(window)
+        if CORRECTION_SCRIBING:
+            log.info("=== Correction scribing jarret ===")
+            corection_scribing.corriger_scribing_jarret(window, affaire)
+        if AFFECTATION_MACHINE:
+            log.info("=== Affectation machine ===")
+            affectation_machine.affectation_machine(window, affaire)
+        if CONVERSION_FERS_PLATS:
+            log.info("=== Conversion fers plats ===")
+            convertir_fers_plats(window, affaire)
+        pp.quitter_gestion_production(window)
 
     log.info("=== Fin du projet %s ===", affaire)
 
@@ -635,7 +154,7 @@ def traiter_projet(window, dossier_projet):
 def recuperer_apres_erreur(window):
     # Meilleur effort pour revenir à l'écran principal après un échec, sans jamais quitter l'appli
     try:
-        fermer_apercu(timeout=10)
+        pp.fermer_apercu(timeout=10)
     except Exception:
         log.warning("Impossible de fermer la fenêtre d'aperçu")
 
@@ -649,7 +168,7 @@ def recuperer_apres_erreur(window):
             log.warning("Impossible de fermer l'écran « %s »", ecran)
 
     try:
-        revenir_steel_projects(window)
+        pp.revenir_steel_projects(window)
     except Exception:
         log.warning("Impossible de revenir sur la fenêtre principale")
 
@@ -658,6 +177,8 @@ def appliquer_configuration(cfg):
     # Recopie les paramètres saisis dans l'interface dans les constantes utilisées par les étapes
     global USERNAME, PASSWORD, EXE_PATH, PHASE_MIN, PHASE_MAX
     global COMMENTAIRE_2, PHASE_SEUIL_GR, COMMENTAIRE_GR
+    global COMPARAISON_CLAUDE, CORRECTION_SCRIBING
+    global AFFECTATION_MACHINE, CONVERSION_FERS_PLATS
     USERNAME = cfg["utilisateur"]
     PASSWORD = cfg["mot_de_passe"]
     EXE_PATH = cfg["exe"]
@@ -666,9 +187,32 @@ def appliquer_configuration(cfg):
     COMMENTAIRE_2 = cfg["commentaire_2"]
     PHASE_SEUIL_GR = cfg["seuil_gr"]
     COMMENTAIRE_GR = cfg["commentaire_gr"]
+    COMPARAISON_CLAUDE = cfg["comparaison_claude"]
+    CORRECTION_SCRIBING = cfg["correction_scribing"]
+    AFFECTATION_MACHINE = cfg["affectation_machine"]
+    CONVERSION_FERS_PLATS = cfg["conversion_fers_plats"]
+    pp.USERNAME = USERNAME
+    pp.PASSWORD = PASSWORD
+    pp.EXE_PATH = EXE_PATH
+    pp.PHASE_MIN = PHASE_MIN
+    pp.PHASE_MAX = PHASE_MAX
+    pp.COMMENTAIRE_2 = COMMENTAIRE_2
+    pp.PHASE_SEUIL_GR = PHASE_SEUIL_GR
+    pp.COMMENTAIRE_GR = COMMENTAIRE_GR
+    pp.DOSSIER_PROJETS_TRAVAILLER = DOSSIER_PROJETS_TRAVAILLER
 
 
 def executer_workflow(projets, stop_event, messages):
+    # Les print de claude vont dans le journal (pas de console avec pythonw)
+    ancien_stdout = sys.stdout
+    sys.stdout = FluxVersJournal()
+    try:
+        executer_projets(projets, stop_event, messages)
+    finally:
+        sys.stdout = ancien_stdout
+
+
+def executer_projets(projets, stop_event, messages):
     # Tourne dans un thread séparé : connexion une seule fois, puis boucle projet par projet
     try:
         comtypes.CoInitialize()  # obligatoire pour UIA dans un thread autre que le principal
@@ -677,8 +221,8 @@ def executer_workflow(projets, stop_event, messages):
 
     reussis, echoues = [], []
     try:
-        window = lancer_application()
-        s_authentifier(window)
+        window = pp.lancer_application()
+        pp.s_authentifier(window)
 
         for i, chemin in enumerate(projets, start=1):
             if stop_event.is_set():
@@ -776,6 +320,19 @@ class InterfaceWorkflow(tk.Tk):
         for col, (libelle, var, largeur) in enumerate(champs):
             ttk.Label(cadre, text=libelle).grid(row=0, column=col * 2, sticky="w", padx=(8, 2), pady=6)
             ttk.Entry(cadre, textvariable=var, width=largeur).grid(row=0, column=col * 2 + 1, padx=(0, 6))
+
+        self.var_claude = tk.BooleanVar(value=COMPARAISON_CLAUDE)
+        self.var_scribing = tk.BooleanVar(value=CORRECTION_SCRIBING)
+        self.var_affectation = tk.BooleanVar(value=AFFECTATION_MACHINE)
+        self.var_conversion_fp = tk.BooleanVar(value=CONVERSION_FERS_PLATS)
+        ttk.Checkbutton(cadre, text="Comparaison Claude", variable=self.var_claude).grid(
+            row=1, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 6))
+        ttk.Checkbutton(cadre, text="Correction scribing jarret", variable=self.var_scribing).grid(
+            row=1, column=4, columnspan=4, sticky="w", padx=8, pady=(0, 6))
+        ttk.Checkbutton(cadre, text="Affectation machine", variable=self.var_affectation).grid(
+            row=2, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 6))
+        ttk.Checkbutton(cadre, text="Conversion fers plats", variable=self.var_conversion_fp).grid(
+            row=2, column=4, columnspan=4, sticky="w", padx=8, pady=(0, 6))
 
         # 3. Projets (sélection multiple)
         cadre = ttk.LabelFrame(self, text="3. Projets trouvés (sélectionnez ceux à traiter)")
@@ -875,6 +432,10 @@ class InterfaceWorkflow(tk.Tk):
                 "commentaire_2": self.var_com2.get().strip(),
                 "seuil_gr": int(self.var_seuil_gr.get()),
                 "commentaire_gr": self.var_com_gr.get().strip(),
+                "comparaison_claude": self.var_claude.get(),
+                "correction_scribing": self.var_scribing.get(),
+                "affectation_machine": self.var_affectation.get(),
+                "conversion_fers_plats": self.var_conversion_fp.get(),
             }
         except ValueError:
             messagebox.showerror("Paramètres invalides",

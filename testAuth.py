@@ -13,7 +13,7 @@ PASSWORD = "EBA2026"
 
 EXE_PATH = r"C:\SteelProjects\Sp.Plm\Sp.Plm.exe"
 
-IMPORT_DIRECTORY = r"C:\USERS\E.BENAMOR\DESKTOP\02-HC\*.XML"
+IMPORT_DIRECTORY = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\02XY"
 
 AFFAIRE =  IMPORT_DIRECTORY.split("\\")[-2]
 

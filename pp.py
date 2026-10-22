@@ -13,15 +13,19 @@ from pywinauto.timings import TimeoutError as DelaiDepasse
 from pywinauto.timings import wait_until
 from pywinauto.uia_defines import get_elem_interface
 
-import testClaude
+import affectation_machine
+from conversion_fer_plat import convertir_fers_plats
+import corection_scribing
+import claude
+
 
 # ===== CONFIGURATION =====
 USERNAME = "EBA"
 PASSWORD = "EBA2026"
 EXE_PATH = r"C:\Program Files (x86)\SteelProjects\Sp.Plm\Sp.Plm.exe"
 IMPORT_DIRECTORY = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\02XY"
-AFFAIRE = IMPORT_DIRECTORY.split("\\")[-1]   # transmise à testClaude pour la comparaison
-DOSSIER_PROJETS_TRAVAILLER = testClaude.DOSSIER_PROJETS  # même dossier que celui lu par testClaude
+AFFAIRE = IMPORT_DIRECTORY.split("\\")[-1]   # transmise à claude pour la comparaison
+DOSSIER_PROJETS_TRAVAILLER = claude.DOSSIER_PROJETS  # même dossier que celui lu par claude
 PHASE_MIN = 130
 PHASE_MAX = 140
 COMMENTAIRE_2 = "PU"
@@ -34,6 +38,7 @@ DESKTOP = Desktop(backend="uia")
 # Titres des fenêtres (regroupés ici pour être corrigés facilement)
 TITRE_APERCU = r"Aper.u \d+/\d+"
 TITRE_GESTION_AFFAIRES = "Gestion d'Affaires"
+TITRE_BOITE_PDF = "Enregistrer le fichier PDF sous"
 
 # ===== OUTILS =====
 def attendre(ctrl, etat="exists visible enabled", timeout=30):
@@ -48,6 +53,23 @@ def echapper_keys(texte):
 def cliquer(ctrl, timeout=30):
     # Attend qu'un contrôle soit cliquable, puis clique dessus
     attendre(ctrl, timeout=timeout).click_input()
+
+
+def cliquer_sans_souris(ctrl, timeout=30):
+    # invoke() : clic sans souris, insensible aux fenêtres posées par-dessus (Claude, Acrobat, Excel)
+    ctrl = attendre(ctrl, timeout=timeout)
+    try:
+        ctrl.invoke()
+    except Exception:
+        ctrl.click_input()   # contrôle sans interface Invoke : clic souris comme avant
+
+
+def titre_premier_plan():
+    # Titre de la fenêtre au premier plan (diagnostic quand un écran ne s'ouvre pas)
+    try:
+        return DESKTOP.window(handle=ctypes.windll.user32.GetForegroundWindow()).window_text()
+    except Exception:
+        return "?"
 
 
 def saisir_texte(champ, texte, essais=3):
@@ -233,13 +255,16 @@ def enregistrer_pdf(timeout=120):
     chemin = os.path.join(dossier_affaire_pdf(), f"{AFFAIRE} PLM.pdf")
     debut = time.time()  # le PDF retenu doit être écrit après cet instant (pas un ancien fichier)
 
-    boite = DESKTOP.window(title="Enregistrer le fichier PDF sous")
-    attendre(boite, "exists visible", timeout=timeout)
-    handle = boite.wrapper_object().handle
-    boite = DESKTOP.window(handle=handle)
+    # Handle par l'API Windows (FindWindow) et non par UIA : pendant la génération du PDF
+    # la boîte ne répond pas, et une recherche UIA échoue (ElementNotFoundError)
+    def boite_visible():
+        h = ctypes.windll.user32.FindWindowW(None, TITRE_BOITE_PDF)
+        return h if h and ctypes.windll.user32.IsWindowVisible(h) else None
+    handle = wait_until(timeout, 0.5, boite_visible, None, operator.is_not)
 
     # Attend que la boîte réponde (Steel Projects peut être occupé pendant la génération du PDF)
     wait_until(300, 1, lambda: not ctypes.windll.user32.IsHungAppWindow(handle))
+    boite = DESKTOP.window(handle=handle)
 
     # Ramène la boîte au premier plan : elle peut être cachée derrière la fenêtre de l'appli
     boite.set_focus()
@@ -362,9 +387,14 @@ def finir_import(window, timeout=3600):
 
 def ouvrir_gestion_production(window):
     # Ouvre l'écran Gestion de production
-    cliquer(window.child_window(title="Gestion de production", control_type="Button"))
+    window.set_focus()
+    cliquer_sans_souris(window.child_window(title="Gestion de production", control_type="Button"))
     toolbar = window.child_window(auto_id="toolBar", control_type="ToolBar", found_index=0)
-    attendre(toolbar, "exists visible", timeout=60)
+    try:
+        attendre(toolbar, "exists visible", timeout=60)
+    except DelaiDepasse:
+        raise RuntimeError("Gestion de production ne s'est pas ouverte "
+                           f"(fenêtre au premier plan : {titre_premier_plan()!r})")
 
 
 def quitter_gestion_production(window, timeout=60):
@@ -382,10 +412,14 @@ def quitter_gestion_production(window, timeout=60):
 def ouvrir_gestion_affaires(window):
     # Ouvre l'écran Gestion d'Affaires et attend qu'il soit réellement chargé
     window.set_focus()
-    cliquer(window.child_window(title="Gestion d'Affaires", control_type="Button"))
+    cliquer_sans_souris(window.child_window(title=TITRE_GESTION_AFFAIRES, control_type="Button"))
 
     # L'écran est ouvert quand le titre devient « Steel Projects - Gestion d'Affaires »
-    wait_until(120, 0.5, lambda: "Gestion d'Affaires" in window.window_text())
+    try:
+        wait_until(120, 0.5, lambda: TITRE_GESTION_AFFAIRES in window.window_text())
+    except DelaiDepasse:
+        raise RuntimeError("Gestion d'Affaires ne s'est pas ouverte "
+                           f"(fenêtre au premier plan : {titre_premier_plan()!r})")
     attendre_appli(window, timeout=120)
 
 
@@ -575,6 +609,92 @@ def fermer_apercu(timeout=60):
     print(f"{len(handles)} fenêtre(s) d'aperçu fermée(s)")
 
 
+def fermer_pdf_ouverts(chemin_pdf, timeout=60, attente=15):
+    # Ferme les visionneuses (Acrobat, Edge...) ouvertes automatiquement sur le PDF enregistré :
+    # fenêtres dont le titre contient le nom du fichier
+    # attente : temps laissé à la visionneuse pour s'ouvrir avant de conclure qu'aucun PDF n'est ouvert
+    nom = os.path.splitext(os.path.basename(chemin_pdf))[0].lower()
+
+    def fenetres_pdf():
+        return [w for w in DESKTOP.windows() if nom in w.window_text().lower()] or None
+
+    try:
+        fenetres = wait_until(attente, 0.5, fenetres_pdf, None, operator.is_not)  # laisse la visionneuse s'ouvrir
+    except DelaiDepasse:
+        print("Aucun PDF ouvert à fermer")
+        return
+
+    # Ctrl+W ferme seulement l'onglet du PDF : fermer la fenêtre entière fait demander à Acrobat
+    # « fermer tous les onglets ou l'onglet actif ? » quand d'autres onglets sont ouverts
+    for _ in range(len(fenetres)):
+        fenetre = fenetres_pdf()
+        if not fenetre:
+            break
+        fenetre[0].set_focus()
+        send_keys("^w")
+        time.sleep(1)
+
+    try:
+        wait_until(timeout, 0.5, lambda: fenetres_pdf() is None)
+    except DelaiDepasse:
+        raise RuntimeError(f"Le PDF est toujours ouvert : {[w.window_text() for w in fenetres_pdf() or []]}")
+    print(f"{len(fenetres)} PDF fermé(s)")
+
+
+def fermer_visionneuses(fichiers, timeout=60):
+    # Ferme les PDF/classeurs ouverts par les téléchargements de Claude.
+    # Acrobat ouvre tout en onglets d'UNE fenêtre dont le titre ne montre que l'onglet actif :
+    # on répète Ctrl+W tant qu'une fenêtre porte le nom d'un des fichiers (onglet suivant ensuite).
+    # Le nom téléchargé (« 02XY_CHUTES_2.pdf ») contient le nom enregistré (« 02XY_CHUTES »).
+    noms = [os.path.splitext(os.path.basename(str(f)))[0].lower() for f in fichiers]
+    if not noms:
+        return
+
+    def fenetres_ouvertes():
+        try:
+            return [w for w in DESKTOP.windows()
+                    if any(n in w.window_text().lower() for n in noms)]
+        except COMError:
+            return []  # fenêtre en cours de fermeture : on réessaie
+
+    excel = set()  # fenêtres Excel dont on a fermé un classeur
+    fermes = 0
+    fin = time.time() + timeout
+    while time.time() < fin:
+        fenetres = fenetres_ouvertes()
+        if not fenetres:
+            break
+        w = fenetres[0]
+        try:
+            w.set_focus()
+            # Ctrl+W seulement si la fenêtre est vraiment au premier plan
+            # (sinon il partait vers une autre fenêtre, par exemple Excel)
+            if ctypes.windll.user32.GetForegroundWindow() != w.handle:
+                time.sleep(0.5)
+                continue
+            if w.window_text().endswith("Excel"):
+                excel.add(w.handle)
+            send_keys("^w")
+            fermes += 1
+        except Exception:
+            pass  # fenêtre fermée entre-temps : on réessaie
+        time.sleep(1)
+
+    # Excel reste ouvert sans classeur (titre « Excel ») après Ctrl+W : on ferme ces fenêtres-là
+    for handle in excel:
+        try:
+            w = DESKTOP.window(handle=handle)
+            if w.exists(timeout=0) and w.window_text().strip() == "Excel":
+                w.close()
+        except Exception:
+            pass
+
+    restants = [w.window_text() for w in fenetres_ouvertes()]
+    if restants:
+        print(f"ATTENTION, fichier(s) encore ouvert(s) : {restants}")
+    print(f"{fermes} fichier(s) téléchargé(s) fermé(s)")
+
+
 def revenir_steel_projects(window, timeout=300):
     # Attend que Steel Projects réponde de nouveau (il peut rester occupé après l'impression),
     # puis lui redonne le focus
@@ -601,6 +721,7 @@ def quitter_gestion_affaires(window, timeout=60):
 def main_complet():
     # Enchaîne toutes les étapes du workflow
     window = lancer_application()
+    # window = DESKTOP.window(title_re=".*Steel Projects.*", found_index=0)
 
     s_authentifier(window)
     importer_tekla(window, IMPORT_DIRECTORY)    #/ importer_CAM3D(window)
@@ -613,17 +734,36 @@ def main_complet():
     commentaire_gr(window)
     quitter_gestion_production(window)
     chemin_pdf = impression(window)
+    chemin_pdf = r"C:\Users\E.BENAMOR\Desktop\projetTravailler\02XY\02XY PLM.pdf"
+    fermer_pdf_ouverts(chemin_pdf)
     fermer_apercu()
     revenir_steel_projects(window)
     quitter_gestion_affaires(window)
 
-    # Comparaison avec Claude, seulement une fois Steel Projects terminé :
-    # les deux parties utilisent le clavier et le focus des fenêtres
+   
+    # Comparaison avec Claude, une fois l'impression terminée et Steel Projects revenu à l'accueil
     print("=== Comparaison avec Claude ===")
-    return testClaude.comparer_avec_claude(
-        testClaude.fichiers_affaire(AFFAIRE, chemin_pdf),
-        testClaude.dossier_sortie_affaire(AFFAIRE),
+    fichiers = claude.comparer_avec_claude(
+        claude.fichiers_affaire(AFFAIRE, chemin_pdf),
+        claude.dossier_sortie_affaire(AFFAIRE),
     )
+    # Visionneuses (Acrobat, Excel) ouvertes par les téléchargements : elles cachaient Steel Projects
+    fermer_visionneuses(fichiers)
+    revenir_steel_projects(window)
+
+    # Correction des repères « _ » : rouvre la Gestion de production sur l'affaire
+    print("=== Correction scribing jarret ===")
+    ouvrir_gestion_production(window)
+    filtrer_par_affaire(window)
+    corection_scribing.corriger_scribing_jarret(window, AFFAIRE)
+
+    # Affectation machine (classeur de Claude) dans CMNTR1, même écran Gestion de production
+    print("=== Affectation machine ===")
+    affectation_machine.affectation_machine(window, AFFAIRE)
+    # quitter_gestion_production(window)
+    convertir_fers_plats(window,AFFAIRE)
+    quitter_gestion_production(window)
+    print("projet réussi")
 
 
 if __name__ == "__main__":

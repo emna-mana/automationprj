@@ -7,26 +7,47 @@ import unicodedata
 import winreg
 from datetime import datetime
 from pathlib import Path
-from collections import Counter
 
-from pywinauto import Desktop
+import win32clipboard
+import win32gui
+from pywinauto import Desktop, mouse
 from pywinauto.keyboard import send_keys
 
-DOSSIER_PROJETS_DEFAUT = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\02XY"
+# ===== CONFIGURATION =====
+# AFFAIRE ne sert qu'au lancement seul de ce fichier : le workflow (pp.py) passe pp.AFFAIRE
+# à fichiers_affaire() et dossier_sortie_affaire().
+DOSSIER_PROJETS = r"C:\Users\E.BENAMOR\Desktop\projetTravailler"
+FICHIER_FER_PLAT = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\FER PLAT.xlsx"
+AFFAIRE = "02XY"
+CLAUDE_APP_USER_MODEL_ID = "Claude_pzs8sxrjxfjjc!Claude"
 
-AFFAIRE = DOSSIER_PROJETS_DEFAUT .split("\\")[-1]
 
-FICHIERS = [
-    r"C:\Users\E.BENAMOR\Desktop\projetTravailler\02XY\CROQUIS DEBITAGE 02XY.pdf",  #CHANGE
-    r"C:\Users\E.BENAMOR\Desktop\projetTravailler\02XY\02XY PLM.PDF", #Toujours le fichier PDF qui a nomAffaire PLM sous DOSSIER_PROJETS_DEFAUT
-    r"C:\Users\E.BENAMOR\Desktop\projetTravailler\FER PLAT.xlsx"
-]
- 
+def fichiers_affaire(affaire, pdf_plm=None):
+    """Fichiers envoyés à Claude pour une affaire : croquis, PDF PLM (Steel Projects), fers plats.
 
- 
+    pdf_plm : chemin exact du PDF produit par test_pp.py ; sinon « <affaire> PLM.pdf ».
+    """
+    dossier = os.path.join(DOSSIER_PROJETS, affaire)
+    return [
+        os.path.join(dossier, f"CROQUIS DEBITAGE {affaire}.pdf"),
+        pdf_plm or os.path.join(dossier, f"{affaire} PLM.pdf"),
+        FICHIER_FER_PLAT,
+    ]
+
+
+def dossier_sortie_affaire(affaire):
+    return os.path.join(DOSSIER_PROJETS, affaire, "rapport")
+
+
+FICHIERS = fichiers_affaire(AFFAIRE)
 
 PROMPT_LIGNES = [
     '# PROMPT – PRÉPARATION DE FABRICATION (GROUPE MATEM) – v3 ',
+    '',
+    "* Ne pose AUCUNE question à l'utilisateur et n'attends jamais de réponse. N'utilise pas d'outil de question.",
+    "* Traite l'intégralité des tâches 1 à 6, jusqu'au bout, sans t'arrêter.",
+    '* Les PDF des classeurs par machine sont TOUJOURS livrés, à chaque exécution, sous forme de fichiers téléchargeables, un PDF par classeur, en plus du classeur Excel.',
+    "* LIVRAISON OBLIGATOIRE : enregistre le classeur Excel et chaque PDF de classeur dans le dossier de sortie (/mnt/user-data/outputs/), puis, en toute fin de réponse, PRÉSENTE-LES tous avec l'outil de présentation de fichiers (present_files), pour qu'un bouton « Télécharger » apparaisse pour chacun. Un fichier seulement cité dans le texte n'est PAS livré.",
     '',
     '## 1. RÔLE',
     'Tu es préparateur de fabrication en construction métallique pour GROUPE MATEM. Tu es expert en charpente métallique, en programmation CNC FICEP et en optimisation matière (mise en barre et mise en tôle).',
@@ -182,7 +203,7 @@ PROMPT_LIGNES = [
     '* Une page de F1 va dans un seul classeur, celui de la machine affectée au repère (tableau 2).',
     '* Ne crée pas de classeur vide.',
     '* Le total des pages des classeurs doit être égal au nombre de pages de F1 : aucune page oubliée, aucune page en double.',
-    '* Regroupe tous les PDF et le classeur Excel dans un fichier .zip nommé « Affaire_Preparation_vX.zip ».',
+    '* Livre chaque PDF de classeur séparément, en téléchargement direct dans la discussion. Ne crée AUCUN fichier .zip.',
     '',
     '### Tâche 4 – Mise en barre',
     '',
@@ -205,9 +226,9 @@ PROMPT_LIGNES = [
     'Regroupe les besoins des tâches 4 et 5 : désignation, dimensions, longueur ou format, quantité, nuance S275JR, poids unitaire et poids total. Indique les kg/m utilisés et leur source.',
     '',
     '## 8. FORMAT DE SORTIE',
-    'Livre un classeur Excel (un onglet par tableau, totaux en formules), les PDF des classeurs par machine (tâche 3) et un .zip qui regroupe le tout.',
+    'Livre un classeur Excel (un onglet par tableau, totaux en formules) et les PDF des classeurs par machine (tâche 3), un fichier PDF par classeur. Ne crée AUCUN fichier .zip.',
     '',
-    '**Précision (prioritaire sur le paragraphe ci-dessus) : ne crée PAS de fichier .zip. Livre les PDF des classeurs par machine directement, un fichier PDF par classeur, en plus du classeur Excel.**',
+    "**Chaque fichier (Excel et chaque PDF) doit être présenté dans la discussion avec un bouton « Télécharger ». Un fichier seulement cité dans le texte n'est PAS livré.**",
     '',
     '### Tableau 1 – Différences F1 / F2',
     '| Plan F2 | Rep | Élément comparé | Valeur F1 | Valeur F2 | Écart (OUI / NON / À VÉRIFIER) | Action |',
@@ -242,13 +263,15 @@ PROMPT_LIGNES = [
     '* Les quantités de la mise en barre et de la mise en tôle = celles du tableau 2 (quantités F2 retenues).',
     "* Aucune pièce plus longue que sa barre d'achat sans signalement.",
     '* Toutes les mentions « DONNÉE MANQUANTE », « DÉPASSEMENT » et « HORS CAPACITÉ », ainsi que les hypothèses, sont listées dans un récapitulatif final.',
+    '* Chaque PDF de classeur non vide est présent en téléchargement, et le classeur Excel est livré.',
+    "* DERNIÈRE ACTION de ta réponse : présente avec l'outil de présentation de fichiers (present_files) le classeur Excel et TOUS les PDF des classeurs. Vérifie qu'un bouton « Télécharger » s'affiche pour chacun ; sinon, recommence la présentation.",
     '',
 ]
 
 PROMPT = "\n".join(PROMPT_LIGNES)
 
 DELAI_REPONSE = 3600 # secondes d'attente maximale pour la réponse de Claude
-DOSSIER_SORTIE = os.path.join(r"C:\Users\E.BENAMOR\Desktop\projetTravailler", AFFAIRE, "rapport")
+DOSSIER_SORTIE = dossier_sortie_affaire(AFFAIRE)
 
 def echapper(texte):
     """Protège les caractères spéciaux de pywinauto (accolades, +, ^, %, ~, parenthèses)."""
@@ -277,34 +300,84 @@ def dossier_telechargements():
     return Path(os.path.expandvars(chemin))
 
 
-def fenetre_claude():
-    fenetres = Desktop(backend="uia").windows(title_re=r".*Claude.*")
+def fenetre_claude(timeout=90):
+    # Titre exact : « .*Claude.* » trouvait aussi VS Code quand testClaude.py est ouvert
+    desktop = Desktop(backend="uia")
+    fenetres = desktop.windows(title="Claude")
     if not fenetres:
-        raise RuntimeError("Fenêtre Claude introuvable : ouvrez l'application puis relancez le script.")
+        print("Claude Desktop n'est pas ouvert : lancement de l'application.")
+        os.startfile(f"shell:AppsFolder\\{CLAUDE_APP_USER_MODEL_ID}")
+        fin = time.time() + timeout
+        while time.time() < fin:
+            fenetres = desktop.windows(title="Claude")
+            if fenetres:
+                break
+            time.sleep(0.5)
+    if not fenetres:
+        titres = [w.window_text() for w in desktop.windows() if w.window_text().strip()]
+        raise RuntimeError(
+            f"Fenêtre Claude introuvable après {timeout}s. "
+            f"Fenêtres visibles : {titres}"
+        )
     fenetre = fenetres[0]
+    if fenetre.is_minimized():
+        fenetre.restore()
     fenetre.set_focus()
     time.sleep(0.5)
     return fenetre
 
 
-def boutons_claude(fenetre):
-    resultat = []
-    for type_ctrl in ("Button", "Hyperlink"):
-        try:
-            resultat.extend(fenetre.descendants(control_type=type_ctrl))
-        except Exception:
-            pass
-    return resultat
+def comparable(texte):
+    """Texte comparable : sans accents, minuscules, apostrophe typographique ’ remplacée par '."""
+    return normaliser(texte.replace("’", "'").strip())
 
 
-def trouver_bouton(fenetre, nom, timeout=10):
+def trouver_element(fenetre, noms, types=("Button", "Hyperlink", "ListItem"), timeout=10):
+    """Premier élément dont le nom est l'un de « noms » (accents, majuscules et apostrophes ignorés)."""
+    cibles = {comparable(n) for n in noms}
     fin = time.time() + timeout
     while time.time() < fin:
-        for c in boutons_claude(fenetre):
-            if c.window_text() == nom:
-                return c
+        for type_ctrl in types:
+            try:
+                for c in fenetre.descendants(control_type=type_ctrl):
+                    if comparable(c.window_text()) in cibles:
+                        return c
+            except Exception:
+                pass  # interface en cours de mise à jour : on réessaie
         time.sleep(0.5)
-    raise RuntimeError(f"Bouton introuvable : {nom}")
+    raise RuntimeError(f"Élément introuvable : {' / '.join(noms)}")
+
+
+def diagnostic_controles(fenetre, limite=200):
+    """Décrit les contrôles UI Automation pour diagnostiquer les changements d'interface."""
+    lignes = [
+        f"Fenêtre : titre={fenetre.window_text()!r}, "
+        f"processus={fenetre.element_info.process_id}, "
+        f"classe={fenetre.element_info.class_name!r}"
+    ]
+    types_interessants = {"Button", "Hyperlink", "Text", "MenuItem", "TabItem", "ListItem"}
+    try:
+        controles = fenetre.descendants()
+    except Exception as exc:
+        return "\n".join(lignes + [f"Lecture des contrôles UIA impossible : {exc!r}"])
+
+    for controle in controles:
+        try:
+            type_controle = controle.element_info.control_type
+            nom = controle.window_text().strip()
+            if type_controle not in types_interessants or (not nom and type_controle != "Button"):
+                continue
+            lignes.append(
+                f"{type_controle}: nom={nom!r}, "
+                f"automation_id={controle.element_info.automation_id!r}, "
+                f"classe={controle.element_info.class_name!r}"
+            )
+            if len(lignes) >= limite:
+                lignes.append("Diagnostic tronqué.")
+                break
+        except Exception as exc:
+            lignes.append(f"Contrôle illisible : {exc!r}")
+    return "\n".join(lignes)
 
 
 def attendre_boite_ouvrir(timeout=15):
@@ -318,32 +391,67 @@ def attendre_boite_ouvrir(timeout=15):
     raise RuntimeError("Boîte « Ouvrir » introuvable.")
 
 
-def champ_nom_fichier(boite):
-    # 1) Champ Edit identifié par son numéro de contrôle (1148)
-    champ = boite.child_window(control_id=1148, class_name="Edit")
-    if champ.exists(timeout=2):
-        return champ
-
-    # 2) Sinon, la zone combo du nom de fichier (contrôle 1148), puis son champ Edit
-    combo = boite.child_window(control_id=1148, class_name="ComboBoxEx32")
-    if combo.exists(timeout=2):
-        return combo.child_window(class_name="Edit", found_index=0)
-
-    # 3) Dernier recours : premier champ Edit de la boîte
-    return boite.child_window(class_name="Edit", found_index=0)
+def zone_message(fenetre):
+    """Zone de saisie du message (le champ le plus bas de la fenêtre)."""
+    champs = fenetre.descendants(control_type="Edit")
+    if not champs:
+        raise RuntimeError("Zone de saisie du message introuvable.")
+    return max(champs, key=lambda e: e.rectangle().top)
 
 
-def joindre_pdf(fenetre, chemin):
-    if not os.path.exists(chemin):
-        raise FileNotFoundError(f"PDF introuvable : {chemin}")
+def donner_clavier(fenetre):
+    """Donne vraiment le clavier à Claude : set_focus seul ne suffit pas toujours
+    (après Steel Projects, les raccourcis partaient ailleurs). Un clic dans la zone de message, si."""
     fenetre.set_focus()
-    send_keys("^u")
-    time.sleep(1.5)
+    zone_message(fenetre).click_input()
+    time.sleep(0.5)
 
-    trouver_bouton(fenetre, "Choisir des fichiers").click_input()
-    time.sleep(1.5)
 
-    boite = attendre_boite_ouvrir()
+def nouvelle_discussion(fenetre):
+    """Ouvre une nouvelle discussion avec le libellé proposé par l'interface Claude."""
+    fenetre.set_focus()
+    try:
+        bouton = trouver_element(
+            fenetre,
+            ("Créer", "Nouveau", "Nouvelle discussion", "Nouveau chat"),
+            types=("Button",),
+        )
+    except RuntimeError:
+        print("Bouton de nouvelle discussion introuvable : essai du raccourci Ctrl+N.")
+        fenetre.set_focus()
+        send_keys("^n")
+    else:
+        bouton.click_input()
+    time.sleep(3)  # laisser le temps à la nouvelle discussion de s'ouvrir
+
+
+def joindre_fichier(fenetre, chemin, essais=3):
+    if not os.path.exists(chemin):
+        raise FileNotFoundError(f"Fichier introuvable : {chemin}")
+
+    # Ancienne interface : bouton « Choisir des fichiers » ;
+    # nouvelle (fenêtre « Importer ou ajouter des fichiers ») : élément de liste « Importer depuis l’ordinateur »
+    noms = ("Choisir des fichiers", "Importer depuis l'ordinateur")
+    for essai in range(1, essais + 1):
+        donner_clavier(fenetre)
+        send_keys("^u")
+        try:
+            element = trouver_element(fenetre, noms, timeout=5)
+            break
+        except RuntimeError:
+            print(f"Fenêtre d'import non ouverte (essai {essai}/{essais})")
+            send_keys("{ESC}")
+    else:
+        raise RuntimeError("Ctrl+U n'ouvre pas la fenêtre d'import de Claude.")
+    element.click_input()
+
+    try:
+        boite = attendre_boite_ouvrir(timeout=5)
+    except RuntimeError:
+        # Nouvelle interface en deux temps : « Importer depuis l’ordinateur » affiche
+        # un bouton « Choisir des fichiers », qui ouvre la boîte « Ouvrir »
+        trouver_element(fenetre, ("Choisir des fichiers",), types=("Button",), timeout=5).click_input()
+        boite = attendre_boite_ouvrir()
     boite.set_focus()
     time.sleep(0.5)
     # Le champ « Nom de fichier » a le focus à l'ouverture : on y tape le chemin complet
@@ -357,25 +465,25 @@ def joindre_pdf(fenetre, chemin):
     time.sleep(2)
 
 def envoyer_prompt(fenetre):
-    champs = fenetre.descendants(control_type="Edit")
-    if not champs:
-        raise RuntimeError("Zone de saisie du message introuvable.")
-    zone = max(champs, key=lambda e: e.rectangle().top)  # la zone de message est tout en bas
+    zone = zone_message(fenetre)
 
+    # Collage par le presse-papiers : quelques secondes au lieu de plusieurs minutes de frappe,
+    # et pas de risque qu'une touche pressée pendant la saisie corrompe le prompt
+    copier_presse_papiers(PROMPT)
     zone.click_input()
     time.sleep(0.5)
-    for i, ligne in enumerate(PROMPT_LIGNES):
-        if ligne:
-            zone.type_keys(echapper(ligne), with_spaces=True, pause=0.01)
-        if i < len(PROMPT_LIGNES) - 1:
-            send_keys("+{ENTER}")  # saut de ligne sans envoyer
-    time.sleep(0.5)
+    send_keys("^v")
+    time.sleep(3)  # laisser Claude intégrer le texte collé
     send_keys("{ENTER}")  # envoi du message
 
 
-def noms_boutons(fenetre):
-    """Compte les boutons visibles par leur nom, avant l'envoi du prompt."""
-    return Counter(c.window_text().strip() for c in boutons_claude(fenetre) if c.window_text().strip())
+def copier_presse_papiers(texte):
+    win32clipboard.OpenClipboard()
+    try:
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardText(texte, win32clipboard.CF_UNICODETEXT)
+    finally:
+        win32clipboard.CloseClipboard()
 
 
 EXTENSIONS = ("*.pdf", "*.xlsx")
@@ -393,25 +501,76 @@ def boutons_telechargement(fenetre):
     return resultat
 
 
-def attendre_tous_les_fichiers(fenetre, timeout, stabilite=120):
-    """Attend que le nombre de boutons de téléchargement reste stable pendant « stabilite » s."""
+# Bouton affiché par Claude tant que la réponse est en cours de rédaction
+NOMS_ARRET = {comparable(n) for n in ("Arrêter", "Arrêter la réponse", "Arrêter la génération",
+                                      "Stop", "Stop response", "Stop generating")}
+
+
+def etat_reponse(fenetre):
+    """(boutons de téléchargement, réponse en cours ?) lus en un seul parcours des boutons."""
+    liste, en_cours = [], False
+    for c in boutons(fenetre):
+        nom = comparable(c.window_text())
+        if nom in NOMS_ARRET:
+            en_cours = True
+        elif nom and "image" not in nom and nom.startswith(("telecharg", "download")):
+            liste.append(c)
+    return liste, en_cours
+
+
+def etat_au_premier_plan(fenetre):
+    """Ramène brièvement Claude au premier plan pour lire des boutons à jour, puis rend la main.
+
+    En arrière-plan, Claude ne met plus à jour ses boutons pour le script : la réponse
+    pouvait être finie sans que le script la voie.
+    """
+    precedente = win32gui.GetForegroundWindow()
+    if precedente == fenetre.handle:
+        return etat_reponse(fenetre)
+    try:
+        fenetre.set_focus()
+        time.sleep(2)
+        return etat_reponse(fenetre)
+    finally:
+        try:
+            Desktop(backend="win32").window(handle=precedente).set_focus()
+        except Exception:
+            pass  # fenêtre précédente fermée entre-temps
+
+
+def attendre_tous_les_fichiers(fenetre, timeout, stabilite=120, rafraichissement=120):
+    """Attend la fin de la réponse (plus de bouton « Arrêter ») et un nombre de boutons
+    de téléchargement stable pendant « stabilite » s.
+
+    Sans le test du bouton « Arrêter », une pause de plus de « stabilite » s entre deux fichiers
+    faisait partir le script avec une liste incomplète. Au délai maximal, on renvoie les fichiers
+    déjà détectés plutôt que rien.
+    """
     fin = time.time() + timeout
     nb_prec, depuis = -1, time.time()
     dernier_message = 0
+    dernier_rafraichissement = time.time()
+    liste = []
     while time.time() < fin:
-        liste = boutons_telechargement(fenetre)
+        if time.time() - dernier_rafraichissement >= rafraichissement:
+            liste, en_cours = etat_au_premier_plan(fenetre)
+            dernier_rafraichissement = time.time()
+        else:
+            liste, en_cours = etat_reponse(fenetre)
         if len(liste) != nb_prec:
             nb_prec, depuis = len(liste), time.time()
             print(f"{datetime.now():%H:%M:%S} – {len(liste)} fichier(s) détecté(s).")
             dernier_message = time.time()
-        elif liste and time.time() - depuis >= stabilite:
+        elif liste and not en_cours and time.time() - depuis >= stabilite:
             return sorted(liste, key=lambda b: b.rectangle().top)
         if time.time() - dernier_message >= 60:  # message d'attente toutes les minutes
-            etat = "vérification que la réponse est finie" if liste else "réponse en cours"
+            etat = "réponse en cours" if en_cours or not liste else "vérification que la réponse est finie"
             print(f"{datetime.now():%H:%M:%S} – {etat}, {len(liste)} fichier(s) détecté(s).")
             dernier_message = time.time()
         time.sleep(3)
-    return []
+    if liste:
+        print(f"Délai de {timeout} s dépassé : téléchargement des {len(liste)} fichier(s) détecté(s).")
+    return sorted(liste, key=lambda b: b.rectangle().top)
 
 
 def chercher_fichiers_recents(debut, deja):
@@ -478,6 +637,26 @@ def empreinte(chemin):
     return hashlib.md5(Path(chemin).read_bytes()).hexdigest()
 
 
+def rendre_visible(fenetre, bouton, essais=15, marge=60):
+    """Fait défiler la discussion à la molette jusqu'à ce que le bouton soit entier à l'écran,
+    au-dessus de la zone de message. ScrollIntoView() échoue sans rien dire dans Claude :
+    le clic tombait alors sous la zone de message ou hors de la fenêtre."""
+    r_fen = fenetre.rectangle()
+    try:
+        bas = zone_message(fenetre).rectangle().top - marge  # marge : bordure + flèche « défiler en bas »
+    except Exception:
+        bas = r_fen.bottom - marge
+    haut = r_fen.top + 80  # barre de titre et en-tête de la discussion
+    centre = ((r_fen.left + r_fen.right) // 2, (haut + bas) // 2)
+    for _ in range(essais):
+        r = bouton.rectangle()
+        if r.top >= haut and r.bottom <= bas:
+            return True
+        mouse.scroll(coords=centre, wheel_dist=-3 if r.bottom > bas else 3)  # négatif = vers le bas
+        time.sleep(0.7)
+    return False
+
+
 def cliquer_bouton(fenetre, bouton):
     """Fait défiler jusqu'au bouton puis clique à la souris (invoke() échoue hors écran)."""
     fenetre.set_focus()  # Excel ou Acrobat a pu prendre le focus au clic précédent
@@ -486,14 +665,34 @@ def cliquer_bouton(fenetre, bouton):
     except Exception:
         pass
     time.sleep(1)
+    if not rendre_visible(fenetre, bouton):
+        print("Bouton toujours hors de l'écran après défilement, clic tenté quand même.")
     try:
         bouton.click_input()
     except Exception:
         bouton.invoke()
 
 
-def enregistrer_fichiers_produits(fenetre):
-    os.makedirs(DOSSIER_SORTIE, exist_ok=True)
+def telecharger_bouton(fenetre, i, deja, essais=2):
+    """Clique le i-ème bouton de téléchargement ; reclique une fois si aucun fichier n'arrive."""
+    for essai in range(1, essais + 1):
+        # liste relue à chaque fois : elle peut changer après un clic ou un défilement
+        liste = sorted(boutons_telechargement(fenetre), key=lambda b: b.rectangle().top)
+        if i > len(liste):
+            return None
+        debut = time.time()
+        cliquer_bouton(fenetre, liste[i - 1])
+        source = attendre_nouveau_fichier(debut, deja)
+        if source is not None:
+            return source
+        if essai < essais:
+            print(f"[{i}] Aucun fichier après le clic, nouvel essai...")
+    return None
+
+
+def enregistrer_fichiers_produits(fenetre, dossier_sortie=DOSSIER_SORTIE):
+    """Télécharge tous les fichiers de la réponse dans dossier_sortie ; renvoie les chemins copiés."""
+    os.makedirs(dossier_sortie, exist_ok=True)
 
     liste = attendre_tous_les_fichiers(fenetre, DELAI_REPONSE)
     if not liste:
@@ -501,23 +700,19 @@ def enregistrer_fichiers_produits(fenetre):
         for c in boutons(fenetre):
             if c.window_text():
                 print(" -", repr(c.window_text()))
-        return
+        return []
 
     total = len(liste)
     print(f"{total} fichier(s) à télécharger.")
     deja = set()
     copies = set()  # empreintes des fichiers déjà copiés (évite les doublons)
+    resultats = []
     for i in range(1, total + 1):
-        # liste relue à chaque tour : elle peut changer après un clic ou un défilement
-        liste = sorted(boutons_telechargement(fenetre), key=lambda b: b.rectangle().top)
-        if i > len(liste):
-            print(f"[{i}/{total}] Bouton disparu.")
-            continue
-        debut = time.time()
-        cliquer_bouton(fenetre, liste[i - 1])
-        source = attendre_nouveau_fichier(debut, deja)
+        source = telecharger_bouton(fenetre, i, deja)
         if source is None:
-            print(f"[{i}/{total}] Aucun fichier trouvé après le clic.")
+            liste = sorted(boutons_telechargement(fenetre), key=lambda b: b.rectangle().top)
+            nom = liste[i - 1].window_text() if i <= len(liste) else "?"
+            print(f"[{i}/{total}] ÉCHEC : aucun fichier téléchargé (bouton « {nom} »).")
             continue
         deja.add(source)
         h = empreinte(source)
@@ -525,25 +720,36 @@ def enregistrer_fichiers_produits(fenetre):
             print(f"[{i}/{total}] {source.name} : doublon ignoré.")
             continue
         copies.add(h)
-        destination = nom_unique(Path(DOSSIER_SORTIE), nom_propre(source))
+        os.makedirs(dossier_sortie, exist_ok=True)  # recréé s'il a été supprimé pendant l'attente
+        destination = nom_unique(Path(dossier_sortie), nom_propre(source))
         shutil.copy2(str(source), str(destination))
+        resultats.append(destination)
         print(f"[{i}/{total}] {source.name} -> {destination}")
         time.sleep(2)
 
+    print(f"{len(resultats)} fichier(s) enregistré(s) dans {dossier_sortie}")
+    return resultats
 
-if __name__ == "__main__":
+
+def comparer_avec_claude(fichiers=FICHIERS, dossier_sortie=DOSSIER_SORTIE):
+    """Envoie les fichiers et le prompt à Claude, puis télécharge sa réponse dans dossier_sortie."""
+    manquants = [f for f in fichiers if not os.path.exists(f)]
+    if manquants:  # vérifié avant d'ouvrir une discussion
+        raise FileNotFoundError("Fichier(s) introuvable(s) :\n" + "\n".join(manquants))
+
     fenetre = fenetre_claude()
 
-    # Nouvelle discussion (Ctrl+N) avant de joindre les fichiers
-    fenetre.set_focus()
-    send_keys("^n")
-    time.sleep(3)  # laisser le temps à la nouvelle discussion de s'ouvrir
+    nouvelle_discussion(fenetre)
 
-    for chemin in FICHIERS:
+    for chemin in fichiers:
         print("Ajout :", chemin)
-        joindre_pdf(fenetre, chemin)
+        joindre_fichier(fenetre, chemin)
     fenetre.set_focus()
-    print("Les fichiers sont joints. Écriture du prompt...")
+    print("Les fichiers sont joints. Envoi du prompt...")
     envoyer_prompt(fenetre)
     print(f"Message envoyé. Attente de la réponse (jusqu'à {DELAI_REPONSE} s)...")
-    enregistrer_fichiers_produits(fenetre)
+    return enregistrer_fichiers_produits(fenetre, dossier_sortie)
+
+
+if __name__ == "__main__":
+    comparer_avec_claude()

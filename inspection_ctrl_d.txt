@@ -1,0 +1,512 @@
+Control Identifiers:
+
+Dialog - '02XY \ J3'    (L-8, T-8, R1928, B1048)
+['02XY \\ J3Dialog', '02XY \\ J3', 'Dialog']
+child_window(title="02XY \ J3", control_type="Window")
+   | 
+   | Pane - ''    (L2, T118, R1655, B1038)
+   | ['Pane', 'Pane0', 'Pane1']
+   | child_window(auto_id="59648", control_type="Pane")
+   |    | 
+   |    | ScrollBar - 'Vertical'    (L1636, T120, R1653, B1019)
+   |    | ['VerticalScrollBar', 'Vertical', 'ScrollBar', 'ScrollBar0', 'ScrollBar1', 'VerticalScrollBar0', 'VerticalScrollBar1', 'Vertical0', 'Vertical1']
+   |    | child_window(title="Vertical", auto_id="NonClientVerticalScrollBar", control_type="ScrollBar")
+   |    |    | 
+   |    |    | Button - 'Ligne vers le haut'    (L1636, T120, R1653, B137)
+   |    |    | ['Button', 'Ligne vers le haut', 'Ligne vers le hautButton', 'Button0', 'Button1', 'Ligne vers le haut0', 'Ligne vers le haut1', 'Ligne vers le hautButton0', 'Ligne vers le hautButton1']
+   |    |    | child_window(title="Ligne vers le haut", auto_id="UpButton", control_type="Button")
+   |    |    | 
+   |    |    | Thumb - 'Position'    (L1636, T137, R1653, B1001)
+   |    |    | ['PositionThumb', 'Position', 'Thumb', 'PositionThumb0', 'PositionThumb1', 'Position0', 'Position1', 'Thumb0', 'Thumb1']
+   |    |    | child_window(title="Position", auto_id="ScrollbarThumb", control_type="Thumb")
+   |    |    | 
+   |    |    | Button - 'Page suivante'    (L1636, T1001, R1653, B1002)
+   |    |    | ['Button2', 'Page suivante', 'Page suivanteButton', 'Page suivante0', 'Page suivante1', 'Page suivanteButton0', 'Page suivanteButton1']
+   |    |    | child_window(title="Page suivante", auto_id="DownPageButton", control_type="Button")
+   |    |    | 
+   |    |    | Button - 'Ligne vers le bas'    (L1636, T1002, R1653, B1019)
+   |    |    | ['Button3', 'Ligne vers le bas', 'Ligne vers le basButton', 'Ligne vers le bas0', 'Ligne vers le bas1', 'Ligne vers le basButton0', 'Ligne vers le basButton1']
+   |    |    | child_window(title="Ligne vers le bas", auto_id="DownButton", control_type="Button")
+   |    | 
+   |    | ScrollBar - 'Horizontal'    (L4, T1019, R1636, B1036)
+   |    | ['Horizontal', 'HorizontalScrollBar', 'ScrollBar2', 'Horizontal0', 'Horizontal1', 'HorizontalScrollBar0', 'HorizontalScrollBar1']
+   |    | child_window(title="Horizontal", auto_id="NonClientHorizontalScrollBar", control_type="ScrollBar")
+   |    |    | 
+   |    |    | Button - 'Colonne vers la gauche'    (L4, T1019, R21, B1036)
+   |    |    | ['Button4', 'Colonne vers la gaucheButton', 'Colonne vers la gauche', 'Colonne vers la gaucheButton0', 'Colonne vers la gaucheButton1', 'Colonne vers la gauche0', 'Colonne vers la gauche1']
+   |    |    | child_window(title="Colonne vers la gauche", auto_id="UpButton", control_type="Button")
+   |    |    | 
+   |    |    | Thumb - 'Position'    (L21, T1019, R1618, B1036)
+   |    |    | ['PositionThumb2', 'Position2', 'Thumb2']
+   |    |    | child_window(title="Position", auto_id="ScrollbarThumb", control_type="Thumb")
+   |    |    | 
+   |    |    | Button - 'Page vers la droite'    (L1618, T1019, R1619, B1036)
+   |    |    | ['Button5', 'Page vers la droiteButton', 'Page vers la droite', 'Page vers la droiteButton0', 'Page vers la droiteButton1', 'Page vers la droite0', 'Page vers la droite1']
+   |    |    | child_window(title="Page vers la droite", auto_id="DownPageButton", control_type="Button")
+   |    |    | 
+   |    |    | Button - 'Colonne vers la droite'    (L1619, T1019, R1636, B1036)
+   |    |    | ['Button6', 'Colonne vers la droiteButton', 'Colonne vers la droite', 'Colonne vers la droiteButton0', 'Colonne vers la droiteButton1', 'Colonne vers la droite0', 'Colonne vers la droite1']
+   |    |    | child_window(title="Colonne vers la droite", auto_id="DownButton", control_type="Button")
+   |    | 
+   |    | Thumb - ''    (L1636, T1019, R1653, B1036)
+   |    | ['Thumb3']
+   | 
+   | Toolbar - 'Usinage'    (L0, T93, R443, B120)
+   | ['Toolbar', 'UsinageToolbar', 'Usinage', 'Toolbar0', 'Toolbar1', 'Usinage0', 'Usinage1']
+   | child_window(title="Usinage", auto_id="59400", control_type="ToolBar")
+   |    | 
+   |    | CheckBox - ''    (L9, T95, R32, B118)
+   |    | ['CheckBox', 'CheckBox0', 'CheckBox1']
+   |    | 
+   |    | CheckBox - ''    (L32, T95, R55, B118)
+   |    | ['CheckBox2']
+   |    | 
+   |    | Button - ''    (L55, T95, R78, B118)
+   |    | ['Button7']
+   |    | 
+   |    | Button - ''    (L78, T95, R101, B118)
+   |    | ['Button8']
+   |    | 
+   |    | Button - ''    (L101, T95, R124, B118)
+   |    | ['Button9']
+   |    | 
+   |    | Button - ''    (L124, T95, R147, B118)
+   |    | ['Button10']
+   |    | 
+   |    | CheckBox - ''    (L153, T95, R176, B118)
+   |    | ['CheckBox3']
+   |    | 
+   |    | CheckBox - 'Pliage'    (L176, T95, R199, B118)
+   |    | ['Pliage', 'PliageCheckBox', 'CheckBox4']
+   |    | child_window(title="Pliage", control_type="CheckBox")
+   |    | 
+   |    | CheckBox - ''    (L199, T95, R222, B118)
+   |    | ['CheckBox5']
+   |    | 
+   |    | Button - ''    (L228, T95, R251, B118)
+   |    | ['Button11']
+   |    | 
+   |    | Button - ''    (L251, T95, R274, B118)
+   |    | ['Button12']
+   |    | 
+   |    | Button - ''    (L274, T95, R297, B118)
+   |    | ['Button13']
+   |    | 
+   |    | CheckBox - ''    (L297, T95, R320, B118)
+   |    | ['CheckBox6']
+   |    | 
+   |    | CheckBox - ''    (L320, T95, R343, B118)
+   |    | ['CheckBox7']
+   |    | 
+   |    | CheckBox - ''    (L349, T95, R372, B118)
+   |    | ['CheckBox8']
+   |    | 
+   |    | CheckBox - ''    (L372, T95, R395, B118)
+   |    | ['CheckBox9']
+   |    | 
+   |    | CheckBox - ''    (L395, T95, R418, B118)
+   |    | ['CheckBox10']
+   |    | 
+   |    | Button - ''    (L418, T95, R441, B118)
+   |    | ['Button14']
+   | 
+   | Toolbar - 'Copie'    (L442, T93, R851, B119)
+   | ['CopieToolbar', 'Copie', 'Toolbar2']
+   | child_window(title="Copie", auto_id="59399", control_type="ToolBar")
+   |    | 
+   |    | Button - ''    (L451, T95, R474, B117)
+   |    | ['Button15']
+   |    | 
+   |    | CheckBox - ''    (L480, T95, R503, B117)
+   |    | ['CheckBox11']
+   |    | 
+   |    | CheckBox - ''    (L503, T95, R526, B117)
+   |    | ['CheckBox12']
+   |    | 
+   |    | CheckBox - ''    (L526, T95, R549, B117)
+   |    | ['CheckBox13']
+   |    | 
+   |    | CheckBox - ''    (L549, T95, R572, B117)
+   |    | ['CheckBox14']
+   |    | 
+   |    | Button - ''    (L578, T95, R601, B117)
+   |    | ['Button16']
+   |    | 
+   |    | Button - ''    (L601, T95, R624, B117)
+   |    | ['Button17']
+   |    | 
+   |    | Button - ''    (L624, T95, R647, B117)
+   |    | ['Button18']
+   |    | 
+   |    | Button - ''    (L653, T95, R676, B117)
+   |    | ['Button19']
+   |    | 
+   |    | Button - ''    (L676, T95, R699, B117)
+   |    | ['Button20']
+   |    | 
+   |    | Button - ''    (L699, T95, R722, B117)
+   |    | ['Button21']
+   |    | 
+   |    | Button - ''    (L728, T95, R751, B117)
+   |    | ['Button22']
+   |    | 
+   |    | Button - ''    (L751, T95, R774, B117)
+   |    | ['Button23']
+   |    | 
+   |    | Button - ''    (L780, T95, R803, B117)
+   |    | ['Button24']
+   |    | 
+   |    | Button - ''    (L803, T95, R826, B117)
+   |    | ['Button25']
+   |    | 
+   |    | Button - ''    (L826, T95, R849, B117)
+   |    | ['Button26']
+   | 
+   | Toolbar - 'Dessin'    (L0, T69, R766, B95)
+   | ['DessinToolbar', 'Dessin', 'Toolbar3', 'Dessin0', 'Dessin1']
+   | child_window(title="Dessin", auto_id="59398", control_type="ToolBar")
+   |    | 
+   |    | CheckBox - ''    (L9, T71, R32, B93)
+   |    | ['CheckBox15']
+   |    | 
+   |    | CheckBox - ''    (L38, T71, R61, B93)
+   |    | ['CheckBox16']
+   |    | 
+   |    | CheckBox - ''    (L61, T71, R84, B93)
+   |    | ['CheckBox17']
+   |    | 
+   |    | CheckBox - ''    (L90, T71, R113, B93)
+   |    | ['CheckBox18']
+   |    | 
+   |    | CheckBox - ''    (L113, T71, R136, B93)
+   |    | ['CheckBox19']
+   |    | 
+   |    | CheckBox - ''    (L136, T71, R159, B93)
+   |    | ['CheckBox20']
+   |    | 
+   |    | CheckBox - ''    (L159, T71, R182, B93)
+   |    | ['CheckBox21']
+   |    | 
+   |    | CheckBox - ''    (L188, T71, R211, B93)
+   |    | ['CheckBox22']
+   |    | 
+   |    | CheckBox - ''    (L211, T71, R234, B93)
+   |    | ['CheckBox23']
+   |    | 
+   |    | CheckBox - ''    (L234, T71, R257, B93)
+   |    | ['CheckBox24']
+   |    | 
+   |    | CheckBox - ''    (L257, T71, R280, B93)
+   |    | ['CheckBox25']
+   |    | 
+   |    | CheckBox - ''    (L286, T71, R309, B93)
+   |    | ['CheckBox26']
+   |    | 
+   |    | CheckBox - ''    (L309, T71, R332, B93)
+   |    | ['CheckBox27']
+   |    | 
+   |    | CheckBox - ''    (L338, T71, R361, B93)
+   |    | ['CheckBox28']
+   |    | 
+   |    | CheckBox - ''    (L361, T71, R384, B93)
+   |    | ['CheckBox29']
+   |    | 
+   |    | CheckBox - ''    (L384, T71, R407, B93)
+   |    | ['CheckBox30']
+   |    | 
+   |    | CheckBox - ''    (L407, T71, R430, B93)
+   |    | ['CheckBox31']
+   |    | 
+   |    | CheckBox - ''    (L436, T71, R459, B93)
+   |    | ['CheckBox32']
+   |    | 
+   |    | CheckBox - ''    (L459, T71, R482, B93)
+   |    | ['CheckBox33']
+   |    | 
+   |    | CheckBox - ''    (L482, T71, R505, B93)
+   |    | ['CheckBox34']
+   |    | 
+   |    | CheckBox - ''    (L511, T71, R534, B93)
+   |    | ['CheckBox35']
+   |    | 
+   |    | Button - ''    (L534, T71, R557, B93)
+   |    | ['Button27']
+   |    | 
+   |    | CheckBox - ''    (L557, T71, R580, B93)
+   |    | ['CheckBox36']
+   |    | 
+   |    | CheckBox - ''    (L580, T71, R603, B93)
+   |    | ['CheckBox37']
+   |    | 
+   |    | CheckBox - ''    (L603, T71, R626, B93)
+   |    | ['CheckBox38']
+   |    | 
+   |    | CheckBox - ''    (L626, T71, R649, B93)
+   |    | ['CheckBox39']
+   |    | 
+   |    | CheckBox - ''    (L649, T71, R672, B93)
+   |    | ['CheckBox40']
+   |    | 
+   |    | CheckBox - ''    (L672, T71, R695, B93)
+   |    | ['CheckBox41']
+   |    | 
+   |    | CheckBox - ''    (L695, T71, R718, B93)
+   |    | ['CheckBox42']
+   |    | 
+   |    | CheckBox - ''    (L718, T71, R741, B93)
+   |    | ['CheckBox43']
+   |    | 
+   |    | CheckBox - ''    (L741, T71, R764, B93)
+   |    | ['CheckBox44']
+   | 
+   | Toolbar - 'Affichage'    (L0, T45, R582, B71)
+   | ['AffichageToolbar', 'Affichage', 'Toolbar4', 'Affichage0', 'Affichage1']
+   | child_window(title="Affichage", auto_id="59401", control_type="ToolBar")
+   |    | 
+   |    | ComboBox - ''    (L349, T48, R499, B72)
+   |    | ['ComboBoxNouveau dossier', 'ComboBox(8) WhatsApp et 1 page supplémentaire - Profil\xa01 – Microsoft\u200b Edge', 'ComboBoxemna-mana/automationprj - Google Chrome', 'ComboBoxBarre des tâches', 'ComboBoxinspecter_dessin.py - automationprj - Visual Studio Code', 'ComboBoxSteel Projects - Gestion de production', 'ComboBox02XY \\ J3', 'ComboBoxClaude', 'ComboBoxCourrier - Courrier en arrivée - HCL Notes', 'ComboBoxclasseurs', 'ComboBoxautomationProject - Word', 'ComboBoxDisque local (D:)', 'ComboBox', 'ComboBoxprojetsAtravailler', 'ComboBox02XY_Preparation_Fabrication_3  [Mode protégé] - Excel', 'ComboBoxProgram Manager']
+   |    | child_window(auto_id="32851", control_type="ComboBox")
+   |    |    | 
+   |    |    | Static - ''    (L3, T3, R130, B21)
+   |    |    | ['Static']
+   |    |    | 
+   |    |    | Button - 'Ouvrir'    (L480, T50, R497, B70)
+   |    |    | ['Button28', 'Ouvrir', 'OuvrirButton']
+   |    |    | child_window(title="Ouvrir", auto_id="DropDown", control_type="Button")
+   |    | 
+   |    | Button - ''    (L9, T47, R32, B69)
+   |    | ['Button29']
+   |    | 
+   |    | Button - ''    (L32, T47, R55, B69)
+   |    | ['Button30']
+   |    | 
+   |    | Button - ''    (L55, T47, R78, B69)
+   |    | ['Button31']
+   |    | 
+   |    | Button - ''    (L78, T47, R101, B69)
+   |    | ['Button32']
+   |    | 
+   |    | Button - ''    (L107, T47, R130, B69)
+   |    | ['Button33']
+   |    | 
+   |    | Button - ''    (L130, T47, R153, B69)
+   |    | ['Button34']
+   |    | 
+   |    | Button - ''    (L159, T47, R182, B69)
+   |    | ['Button35']
+   |    | 
+   |    | CheckBox - ''    (L182, T47, R205, B69)
+   |    | ['CheckBox45']
+   |    | 
+   |    | CheckBox - ''    (L205, T47, R228, B69)
+   |    | ['CheckBox46']
+   |    | 
+   |    | Button - ''    (L228, T47, R251, B69)
+   |    | ['Button36']
+   |    | 
+   |    | Button - ''    (L251, T47, R274, B69)
+   |    | ['Button37']
+   |    | 
+   |    | Button - ''    (L274, T47, R297, B69)
+   |    | ['Button38']
+   |    | 
+   |    | Button - ''    (L297, T47, R320, B69)
+   |    | ['Button39']
+   |    | 
+   |    | CheckBox - ''    (L326, T47, R349, B69)
+   |    | ['CheckBox47']
+   |    | 
+   |    | CheckBox - ''    (L505, T47, R528, B69)
+   |    | ['CheckBox48']
+   |    | 
+   |    | CheckBox - ''    (L528, T47, R551, B69)
+   |    | ['CheckBox49']
+   |    | 
+   |    | Button - ''    (L557, T47, R580, B69)
+   |    | ['Button40']
+   | 
+   | Pane - 'Mesure'    (L1653, T771, R1920, B1038)
+   | ['MesurePane', 'Mesure', 'Pane2']
+   | child_window(title="Mesure", auto_id="59394", control_type="Pane")
+   |    | 
+   |    | Pane - ''    (L1658, T788, R1915, B1033)
+   |    | ['Pane3']
+   |    |    | 
+   |    |    | Button - 'Appliquer'    (L1747, T1007, R1822, B1030)
+   |    |    | ['Button41', 'Appliquer', 'AppliquerButton', 'Appliquer0', 'Appliquer1', 'AppliquerButton0', 'AppliquerButton1']
+   |    |    | child_window(title="Appliquer", auto_id="9069", control_type="Button")
+   |    |    | 
+   |    |    | Pane - ''    (L1663, T792, R1910, B999)
+   |    |    | ['Pane4']
+   |    |    | child_window(auto_id="9062", control_type="Pane")
+   | 
+   | Pane - 'Calque'    (L1653, T506, R1920, B773)
+   | ['Pane5', 'Calque', 'CalquePane']
+   | child_window(title="Calque", auto_id="59395", control_type="Pane")
+   |    | 
+   |    | Pane - ''    (L1658, T523, R1915, B768)
+   |    | ['Pane6']
+   |    |    | 
+   |    |    | ListBox - ''    (L1671, T536, R1903, B755)
+   |    |    | ['ListBox', 'ListBox0', 'ListBox1']
+   |    |    | child_window(auto_id="9033", control_type="List")
+   |    |    |    | 
+   |    |    |    | ListItem - '0'    (L1673, T538, R1796, B555)
+   |    |    |    | ['ListItem', '0', '0ListItem', 'ListItem0', 'ListItem1']
+   |    |    |    | child_window(title="0", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'AME'    (L1673, T555, R1796, B572)
+   |    |    |    | ['AME', 'ListItem2', 'AMEListItem']
+   |    |    |    | child_window(title="AME", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'AILE SUPéRIEURE'    (L1673, T572, R1796, B589)
+   |    |    |    | ['AILE SUPéRIEURE', 'ListItem3', 'AILE SUPéRIEUREListItem']
+   |    |    |    | child_window(title="AILE SUPéRIEURE", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'TEXTE'    (L1673, T589, R1796, B606)
+   |    |    |    | ['TEXTE', 'ListItem4', 'TEXTEListItem']
+   |    |    |    | child_window(title="TEXTE", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'CONSTRUCTION'    (L1673, T606, R1796, B623)
+   |    |    |    | ['CONSTRUCTIONListItem', 'ListItem5', 'CONSTRUCTION']
+   |    |    |    | child_window(title="CONSTRUCTION", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'ACCROCHAGE'    (L1673, T623, R1796, B640)
+   |    |    |    | ['ListItem6', 'ACCROCHAGEListItem', 'ACCROCHAGE']
+   |    |    |    | child_window(title="ACCROCHAGE", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'PINCE'    (L1673, T640, R1796, B657)
+   |    |    |    | ['PINCE', 'ListItem7', 'PINCEListItem']
+   |    |    |    | child_window(title="PINCE", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'PLIAGE'    (L1673, T657, R1796, B674)
+   |    |    |    | ['PLIAGE', 'ListItem8', 'PLIAGEListItem']
+   |    |    |    | child_window(title="PLIAGE", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'SCRIBING'    (L1673, T674, R1796, B691)
+   |    |    |    | ['SCRIBING', 'ListItem9', 'SCRIBINGListItem']
+   |    |    |    | child_window(title="SCRIBING", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'POCKETING'    (L1673, T691, R1796, B708)
+   |    |    |    | ['ListItem10', 'POCKETINGListItem', 'POCKETING']
+   |    |    |    | child_window(title="POCKETING", control_type="ListItem")
+   |    |    |    | 
+   |    |    |    | ListItem - 'LEADCUT'    (L1673, T708, R1796, B725)
+   |    |    |    | ['LEADCUT', 'LEADCUTListItem', 'ListItem11']
+   |    |    |    | child_window(title="LEADCUT", control_type="ListItem")
+   | 
+   | Pane - 'Légende'    (L1653, T418, R1920, B508)
+   | ['Légende', 'LégendePane', 'Pane7']
+   | child_window(title="Légende", auto_id="59396", control_type="Pane")
+   |    | 
+   |    | Pane - ''    (L1658, T435, R1915, B503)
+   |    | ['Pane8']
+   |    |    | 
+   |    |    | ListBox - ''    (L1663, T440, R1910, B497)
+   |    |    | ['ListBox2']
+   |    |    | child_window(auto_id="9033", control_type="List")
+   | 
+   | Pane - ''    (L1653, T118, R1920, B420)
+   | ['Pane9']
+   | child_window(auto_id="59393", control_type="Pane")
+   |    | 
+   |    | Pane - ''    (L1658, T135, R1915, B415)
+   |    | ['Pane10']
+   |    |    | 
+   |    |    | Pane - ''    (L1663, T139, R1910, B381)
+   |    |    | ['Pane11']
+   |    |    | child_window(auto_id="9062", control_type="Pane")
+   |    |    |    | 
+   |    |    |    | ScrollBar - 'Vertical'    (L1891, T141, R1908, B362)
+   |    |    |    | ['VerticalScrollBar2', 'Vertical2', 'ScrollBar3']
+   |    |    |    | child_window(title="Vertical", auto_id="NonClientVerticalScrollBar", control_type="ScrollBar")
+   |    |    |    |    | 
+   |    |    |    |    | Button - 'Ligne vers le haut'    (L1891, T141, R1908, B158)
+   |    |    |    |    | ['Button42', 'Ligne vers le haut2', 'Ligne vers le hautButton2']
+   |    |    |    |    | child_window(title="Ligne vers le haut", auto_id="UpButton", control_type="Button")
+   |    |    |    |    | 
+   |    |    |    |    | Thumb - 'Position'    (L1891, T158, R1908, B327)
+   |    |    |    |    | ['PositionThumb3', 'Position3', 'Thumb4']
+   |    |    |    |    | child_window(title="Position", auto_id="ScrollbarThumb", control_type="Thumb")
+   |    |    |    |    | 
+   |    |    |    |    | Button - 'Page suivante'    (L1891, T327, R1908, B345)
+   |    |    |    |    | ['Button43', 'Page suivante2', 'Page suivanteButton2']
+   |    |    |    |    | child_window(title="Page suivante", auto_id="DownPageButton", control_type="Button")
+   |    |    |    |    | 
+   |    |    |    |    | Button - 'Ligne vers le bas'    (L1891, T345, R1908, B362)
+   |    |    |    |    | ['Button44', 'Ligne vers le bas2', 'Ligne vers le basButton2']
+   |    |    |    |    | child_window(title="Ligne vers le bas", auto_id="DownButton", control_type="Button")
+   |    |    |    | 
+   |    |    |    | ScrollBar - 'Horizontal'    (L1665, T362, R1891, B379)
+   |    |    |    | ['Horizontal2', 'HorizontalScrollBar2', 'ScrollBar4']
+   |    |    |    | child_window(title="Horizontal", auto_id="NonClientHorizontalScrollBar", control_type="ScrollBar")
+   |    |    |    |    | 
+   |    |    |    |    | Button - 'Colonne vers la gauche'    (L1665, T362, R1682, B379)
+   |    |    |    |    | ['Button45', 'Colonne vers la gaucheButton2', 'Colonne vers la gauche2']
+   |    |    |    |    | child_window(title="Colonne vers la gauche", auto_id="UpButton", control_type="Button")
+   |    |    |    |    | 
+   |    |    |    |    | Thumb - 'Position'    (L1682, T362, R1847, B379)
+   |    |    |    |    | ['PositionThumb4', 'Position4', 'Thumb5']
+   |    |    |    |    | child_window(title="Position", auto_id="ScrollbarThumb", control_type="Thumb")
+   |    |    |    |    | 
+   |    |    |    |    | Button - 'Page vers la droite'    (L1847, T362, R1874, B379)
+   |    |    |    |    | ['Button46', 'Page vers la droiteButton2', 'Page vers la droite2']
+   |    |    |    |    | child_window(title="Page vers la droite", auto_id="DownPageButton", control_type="Button")
+   |    |    |    |    | 
+   |    |    |    |    | Button - 'Colonne vers la droite'    (L1874, T362, R1891, B379)
+   |    |    |    |    | ['Button47', 'Colonne vers la droiteButton2', 'Colonne vers la droite2']
+   |    |    |    |    | child_window(title="Colonne vers la droite", auto_id="DownButton", control_type="Button")
+   |    |    |    | 
+   |    |    |    | Thumb - ''    (L1891, T362, R1908, B379)
+   |    |    |    | ['Thumb6']
+   |    |    | 
+   |    |    | Button - 'Appliquer'    (L1747, T389, R1822, B412)
+   |    |    | ['Button48', 'Appliquer2', 'AppliquerButton2']
+   |    |    | child_window(title="Appliquer", auto_id="9069", control_type="Button")
+   | 
+   | TitleBar - ''    (L18, T-5, R1918, B25)
+   | ['TitleBar']
+   |    | 
+   |    | Menu - 'Système'    (L0, T0, R22, B22)
+   |    | ['Système', 'Menu', 'SystèmeMenu', 'Système0', 'Système1', 'Menu0', 'Menu1']
+   |    | child_window(title="Système", auto_id="MenuBar", control_type="MenuBar")
+   |    |    | 
+   |    |    | MenuItem - 'Système'    (L0, T0, R22, B22)
+   |    |    | ['MenuItem', 'Système2', 'SystèmeMenuItem', 'MenuItem0', 'MenuItem1']
+   |    |    | child_window(title="Système", control_type="MenuItem")
+   |    | 
+   |    | Button - 'Réduire'    (L1779, T8, R1826, B24)
+   |    | ['Button49', 'RéduireButton', 'Réduire']
+   |    | child_window(title="Réduire", control_type="Button")
+   |    | 
+   |    | Button - 'Restaurer'    (L1826, T8, R1872, B24)
+   |    | ['Button50', 'Restaurer', 'RestaurerButton']
+   |    | child_window(title="Restaurer", control_type="Button")
+   |    | 
+   |    | Button - 'Fermer'    (L1872, T8, R1928, B24)
+   |    | ['Button51', 'Fermer', 'FermerButton']
+   |    | child_window(title="Fermer", control_type="Button")
+   | 
+   | Menu - 'Application'    (L0, T23, R1920, B42)
+   | ['Menu2', 'ApplicationMenu', 'Application']
+   | child_window(title="Application", auto_id="MenuBar", control_type="MenuBar")
+   |    | 
+   |    | MenuItem - 'Fichier'    (L0, T23, R49, B42)
+   |    | ['MenuItem2', 'Fichier', 'FichierMenuItem']
+   |    | child_window(title="Fichier", control_type="MenuItem")
+   |    | 
+   |    | MenuItem - 'Editer'    (L49, T23, R93, B42)
+   |    | ['MenuItem3', 'EditerMenuItem', 'Editer']
+   |    | child_window(title="Editer", control_type="MenuItem")
+   |    | 
+   |    | MenuItem - 'Affichage'    (L93, T23, R158, B42)
+   |    | ['MenuItem4', 'Affichage2', 'AffichageMenuItem']
+   |    | child_window(title="Affichage", control_type="MenuItem")
+   |    | 
+   |    | MenuItem - 'Dessin'    (L158, T23, R206, B42)
+   |    | ['MenuItem5', 'Dessin2', 'DessinMenuItem']
+   |    | child_window(title="Dessin", control_type="MenuItem")
+   |    | 
+   |    | MenuItem - 'Usinage'    (L206, T23, R262, B42)
+   |    | ['MenuItem6', 'UsinageMenuItem', 'Usinage2']
+   |    | child_window(title="Usinage", control_type="MenuItem")
