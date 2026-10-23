@@ -408,22 +408,34 @@ def donner_clavier(fenetre):
 
 
 def nouvelle_discussion(fenetre):
-    """Ouvre une nouvelle discussion avec le libellé proposé par l'interface Claude."""
+    """Ouvre une nouvelle discussion. Essaie le bouton si UIA le voit, sinon Ctrl+N,
+    en vérifiant que la fenêtre Claude est bien au premier plan avant d'envoyer la touche."""
     fenetre.set_focus()
+    time.sleep(0.5)
     try:
         bouton = trouver_element(
             fenetre,
             ("Créer", "Nouveau", "Nouvelle discussion", "Nouveau chat"),
             types=("Button",),
+            timeout=3,  # court : si UIA ne voit rien, on passe vite au raccourci
         )
     except RuntimeError:
-        print("Bouton de nouvelle discussion introuvable : essai du raccourci Ctrl+N.")
-        fenetre.set_focus()
-        send_keys("^n")
-    else:
-        bouton.click_input()
-    time.sleep(3)  # laisser le temps à la nouvelle discussion de s'ouvrir
+        bouton = None
 
+    if bouton is not None:
+        bouton.click_input()
+    else:
+        print("Bouton de nouvelle discussion introuvable : essai du raccourci Ctrl+N.")
+        for _ in range(5):
+            fenetre.set_focus()
+            time.sleep(0.5)
+            if win32gui.GetForegroundWindow() == fenetre.handle:
+                break
+        else:
+            raise RuntimeError("Impossible de mettre la fenêtre Claude au premier plan.")
+        send_keys("^n")
+
+    time.sleep(3)  # laisser la nouvelle discussion s'ouvrir
 
 def joindre_fichier(fenetre, chemin, essais=3):
     if not os.path.exists(chemin):

@@ -1,9 +1,11 @@
+import ctypes
 import logging
 import os
 import queue
 import sys
 import threading
 import tkinter as tk
+from ctypes import wintypes
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
@@ -45,6 +47,14 @@ TITRE_GESTION_AFFAIRES = "Gestion d'Affaires"
 
 log = logging.getLogger("workflow")
 log.setLevel(logging.INFO)
+
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_set_thread_execution_state = _kernel32.SetThreadExecutionState
+_set_thread_execution_state.argtypes = (wintypes.DWORD,)
+_set_thread_execution_state.restype = wintypes.DWORD
+
+ES_CONTINUOUS = 0x80000000
+ES_DISPLAY_REQUIRED = 0x00000002
 
 
 # ===== JOURNAL =====
@@ -207,8 +217,16 @@ def executer_workflow(projets, stop_event, messages):
     ancien_stdout = sys.stdout
     sys.stdout = FluxVersJournal()
     try:
+        if not _set_thread_execution_state(ES_CONTINUOUS | ES_DISPLAY_REQUIRED):
+            raise ctypes.WinError(ctypes.get_last_error())
+
         executer_projets(projets, stop_event, messages)
     finally:
+        if not _set_thread_execution_state(ES_CONTINUOUS):
+            log.error(
+                "Impossible de rétablir la gestion normale de l'écran : %s",
+                ctypes.WinError(ctypes.get_last_error()),
+            )
         sys.stdout = ancien_stdout
 
 
