@@ -22,8 +22,8 @@ import claude
 # ===== CONFIGURATION =====
 MOTIF_CLASSEUR = "*.xlsx"           # cherché dans claude.dossier_sortie_affaire(affaire)
 MOTS_ONGLET = ("affect",)     # onglet « T2_Verif_Affectation »
-ENTETE_REP = "Rep"
-ENTETE_MACHINE = "Machine / moyen"
+ENTETE_REP = ("Rep", "Repère")
+ENTETE_MACHINE = ("Machine / moyen", "Machine")
 
 COLONNE_REPERE = "Secondaire"       # grille des repères secondaires (Ctrl+F6)
 COLONNE_CMNTR1 = "Commentaire"
@@ -97,14 +97,21 @@ def cle_entete(texte):
 
 
 def trouver_entetes(lignes, noms):
+    # noms : chaque élément est un nom, ou un tuple de variants acceptées (ex. ("Rep", "Repère"))
     # (n° de la ligne d'en-tête, [index de colonne de chaque nom])
-    cles = [cle_entete(n) for n in noms]
+    groupes = [[cle_entete(v) for v in (n if isinstance(n, tuple) else (n,))] for n in noms]
     for i, l in enumerate(lignes):
         ligne = [cle_entete(v) for v in l]
-        if all(c in ligne for c in cles):
-            return i, [ligne.index(c) for c in cles]
-    raise ValueError("En-têtes " + " / ".join(f"« {n} »" for n in noms) + " introuvables")
-
+        colonnes = []
+        for variantes in groupes:
+            trouve = next((ligne.index(c) for c in variantes if c in ligne), None)
+            if trouve is None:
+                break
+            colonnes.append(trouve)
+        else:
+            return i, colonnes
+    libelles = [" ou ".join(n) if isinstance(n, tuple) else n for n in noms]
+    raise ValueError("En-têtes " + " / ".join(f"« {n} »" for n in libelles) + " introuvables")
 
 def lire_affectations(chemin):
     # {repère: texte CMNTR1} ; texte = machine sans la partie entre parenthèses

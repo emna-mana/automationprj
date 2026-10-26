@@ -1,4 +1,5 @@
 import ctypes
+import os
 
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys
@@ -50,7 +51,9 @@ def est_entete_profil_origine(texte):
         nom.startswith(am.cle_entete(v))
         for v in variantes
     )
+
 def lire_conversions(chemin):
+    import openpyxl
 
     def normaliser_entete(texte):
         texte = unicodedata.normalize("NFKD", str(texte))
@@ -60,52 +63,52 @@ def lire_conversions(chemin):
         )
         return re.sub(r"[^a-z0-9]", "", texte.lower())
 
-    lignes = am.lire_onglet(chemin)
+    def chercher_entetes(lignes):
+        for i, ligne in enumerate(lignes):
+            colonnes = [normaliser_entete(v) for v in ligne]
 
-    entete = None
-    indices = None
+            def trouver(noms):
+                for j, nom in enumerate(colonnes):
+                    if any(nom == n or nom.startswith(n) for n in noms):
+                        return j
+                return None
 
-    for i, ligne in enumerate(lignes):
+            i_rep = trouver(("rep", "repere"))
+            i_orig = trouver(("profildorigine", "profilorigine", "profilorigin"))
+            i_ret = trouver(("profilretenu",))
 
-        colonnes = [
-            normaliser_entete(v)
-            for v in ligne
-        ]
+            if all(x is not None for x in (i_rep, i_orig, i_ret)):
+                return i, (i_rep, i_orig, i_ret)
+        return None, None
 
-        def trouver(noms):
-            for j, nom in enumerate(colonnes):
-                if any(nom == n or nom.startswith(n)
-                       for n in noms):
-                    return j
-            return None
-
-        i_rep = trouver(("rep", "repere"))
-        i_orig = trouver((
-            "profildorigine",
-            "profilorigine",
-            "profilorigin",
-        ))
-        i_ret = trouver((
-            "profilretenu",
-        ))
-
-        if all(x is not None for x in (i_rep, i_orig, i_ret)):
-            entete = i
-            indices = (i_rep, i_orig, i_ret)
-            break
+    # Cherche les colonnes dans tous les onglets du classeur (pas seulement T2)
+    entete = indices = None
+    lignes = None
+    nom_onglet = None
+    wb = openpyxl.load_workbook(chemin, read_only=True, data_only=True)
+    try:
+        for nom in wb.sheetnames:
+            lignes_onglet = [
+                [str(v).strip() if v is not None else "" for v in ligne]
+                for ligne in wb[nom].iter_rows(values_only=True)
+            ]
+            entete, indices = chercher_entetes(lignes_onglet)
+            if entete is not None:
+                lignes = lignes_onglet
+                nom_onglet = nom
+                break
+    finally:
+        wb.close()
 
     if entete is None:
-        print("En-têtes disponibles :")
-        for ligne in lignes[:10]:
-            print(ligne)
-
+        print("Aucun onglet ne contient Rep / Profil d'origine / Profil retenu")
         raise ValueError(
-            "Colonnes Rep / Profil origine / "
-            "Profil retenu introuvables"
+            "Colonnes Rep / Profil origine / Profil retenu introuvables "
+            f"dans {os.path.basename(chemin)}"
         )
 
     i_rep, i_orig, i_ret = indices
-
+    print(f"Onglet des profils : {nom_onglet}")
     print(
         f"Colonnes détectées : "
         f"Rep={i_rep + 1}, "
@@ -156,7 +159,7 @@ def envoyer(window, touches):
 def lire_longueur_repere(ligne, repere):
     valeur = pp.valeur_cellule(ligne, COLONNE_LONGUEUR)
     try:
-        return float(valeur.replace("\u00a0", "").replace(" ", "").replace(",", "."))
+        return float(valeur.replace(" ", "").replace(" ", "").replace(",", "."))
     except ValueError as exc:
         raise RuntimeError(f"{repere} : longueur absente ou invalide ({valeur!r})") from exc
 

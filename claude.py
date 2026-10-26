@@ -17,37 +17,57 @@ from pywinauto.keyboard import send_keys
 # AFFAIRE ne sert qu'au lancement seul de ce fichier : le workflow (pp.py) passe pp.AFFAIRE
 # à fichiers_affaire() et dossier_sortie_affaire().
 DOSSIER_PROJETS = r"C:\Users\E.BENAMOR\Desktop\projetTravailler"
+DOSSIER_PROJETS_A_TRAVAILLER = r"C:\Users\E.BENAMOR\Desktop\projetsATravailler"
+
 FICHIER_FER_PLAT = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\FER PLAT.xlsx"
 AFFAIRE = "02XY"
 CLAUDE_APP_USER_MODEL_ID = "Claude_pzs8sxrjxfjjc!Claude"
 
 
 def fichiers_affaire(affaire, pdf_plm=None):
-    """Fichiers envoyés à Claude pour une affaire : croquis, PDF PLM (Steel Projects), fers plats.
-
-    pdf_plm : chemin exact du PDF produit par test_pp.py ; sinon « <affaire> PLM.pdf ».
-    """
-    dossier = os.path.join(DOSSIER_PROJETS, affaire)
+    dossier_croquis = os.path.join(DOSSIER_PROJETS_A_TRAVAILLER, affaire)
+    dossier_plm = os.path.join(DOSSIER_PROJETS, affaire)
     return [
-        os.path.join(dossier, f"CROQUIS DEBITAGE {affaire}.pdf"),
-        pdf_plm or os.path.join(dossier, f"{affaire} PLM.pdf"),
+        os.path.join(dossier_croquis, f"CROQUIS DEBITAGE {affaire}.pdf"),
+        pdf_plm or os.path.join(dossier_plm, f"{affaire} PLM.pdf"),
         FICHIER_FER_PLAT,
     ]
-
 
 def dossier_sortie_affaire(affaire):
     return os.path.join(DOSSIER_PROJETS, affaire, "rapport")
 
 
 FICHIERS = fichiers_affaire(AFFAIRE)
-
 PROMPT_LIGNES = [
-    '# PROMPT – PRÉPARATION DE FABRICATION (GROUPE MATEM) – v3 ',
-    '',
     "* Ne pose AUCUNE question à l'utilisateur et n'attends jamais de réponse. N'utilise pas d'outil de question.",
     "* Traite l'intégralité des tâches 1 à 6, jusqu'au bout, sans t'arrêter.",
     '* Les PDF des classeurs par machine sont TOUJOURS livrés, à chaque exécution, sous forme de fichiers téléchargeables, un PDF par classeur, en plus du classeur Excel.',
     "* LIVRAISON OBLIGATOIRE : enregistre le classeur Excel et chaque PDF de classeur dans le dossier de sortie (/mnt/user-data/outputs/), puis, en toute fin de réponse, PRÉSENTE-LES tous avec l'outil de présentation de fichiers (present_files), pour qu'un bouton « Télécharger » apparaisse pour chacun. Un fichier seulement cité dans le texte n'est PAS livré.",
+    '',
+    '## 0. RÈGLES PRIORITAIRES (APPLIQUER AVANT TOUT LE RESTE)',
+    '',
+    '### A. ZÉRO REPORT',
+    '* Aucune tâche ne peut être reportée, marquée « à faire » ou « non comparé ».',
+    '* Pour chaque point demandé (quantité, profil, dimensions, nuance, nombre et Ø des perçages, angles, coupes), tu écris l\'une de ces trois valeurs : « OUI (valeur F1 = valeur F2) », « ÉCART (valeur F1 ≠ valeur F2) », ou « DONNÉE MANQUANTE (raison précise) ».',
+    '* Interdit d\'écrire « conforme » ou « OK » pour un point que tu n\'as pas réellement vérifié sur F2.',
+    '',
+    '### B. LECTURE COMPLÈTE DE F2',
+    '* Tu lis CHAQUE plan F2 page par page, en image à résolution suffisante (pas seulement le cartouche). Tu notes pour chaque repère : nombre de trous, Ø lus, angles cotés, coupes et chanfreins.',
+    '* Si un plan est illisible ou vide, tu l\'écris explicitement (ne jamais supposer).',
+    '',
+    '### C. CONTRÔLES AVANT LIVRAISON (tous obligatoires, sinon tu corriges)',
+    '* Nombre de repères du tableau = nombre de repères de F2 (101).',
+    '* Somme des pages des classeurs PDF = 101.',
+    '* Chaque repère est affecté à une seule machine ; liste les exceptions.',
+    '* Aucune cellule « NON », « à faire » ou « à vérifier » sans raison écrite.',
+    '* Si un contrôle échoue : tu corriges et tu relances, tu ne livres pas.',
+    '',
+    '### D. HYPOTHÈSES',
+    '* Toute hypothèse est listée à part, avec le repère concerné et la raison. Une hypothèse ne remplace jamais une vérification.',
+    '',
+    '### E. SYNTHÈSE ET LIVRAISON',
+    '* Les fichiers sont livrés seulement après le passage de tous les contrôles.',
+    '* La réponse finale commence par un tableau de synthèse : nombre de points OUI / ÉCART / DONNÉE MANQUANTE, puis la liste des écarts.',
     '',
     '## 1. RÔLE',
     'Tu es préparateur de fabrication en construction métallique pour GROUPE MATEM. Tu es expert en charpente métallique, en programmation CNC FICEP et en optimisation matière (mise en barre et mise en tôle).',
@@ -188,7 +208,7 @@ PROMPT_LIGNES = [
     '### Tâche 1 – Comparaison F1 / F2, plan par plan et repère par repère',
     '',
     '* F2 peut répartir un même repère sur plusieurs plans (ex. 700 et 701) : ADDITIONNE les quantités de tous les plans avant de comparer.',
-    '* Quantité F1 : compare la quantité du cartouche ET le total du tableau « Répartition par assemblage ». Signale tout écart.',
+    "* Quantité F1 : compare la quantité du cartouche ET le total du tableau « Répartition par assemblage ». Signale tout écart.",
     '* Compare : repère (détecter les renommages, ex. W72 ↔ G10), profil, dimensions (rectangle englobant L x l x ép), quantité, nombre et Ø des trous, angles et coupes, nuance.',
     '* Jarrets : compare la longueur hors-tout F1 et la longueur CN F2 (« À VÉRIFIER ») ; vérifie que la quantité des ébauches jumelées (ex. J6XJ8) = nombre de paires nécessaires.',
     '* Repère présent dans un seul fichier : le signaler.',
@@ -200,7 +220,7 @@ PROMPT_LIGNES = [
     '',
     '* Un fichier PDF par classeur, nommé « Affaire_MACHINE.pdf » (ex. 26DU_1003_DEB.pdf, 26DU_GEMINI_ép10.pdf, 26DU_CISAILLE_P803.pdf).',
     "* Chaque page de F1 est copiée telle quelle, sans modification ni recadrage, dans l'ordre des repères de F1.",
-    '* Une page de F1 va dans un seul classeur, celui de la machine affectée au repère (tableau 2).',
+    "* Une page de F1 va dans un seul classeur, celui de la machine affectée au repère (tableau 2).",
     '* Ne crée pas de classeur vide.',
     '* Le total des pages des classeurs doit être égal au nombre de pages de F1 : aucune page oubliée, aucune page en double.',
     '* Livre chaque PDF de classeur séparément, en téléchargement direct dans la discussion. Ne crée AUCUN fichier .zip.',
