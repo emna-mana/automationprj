@@ -20,8 +20,8 @@ import claude
 
 
 # ===== CONFIGURATION =====
-USERNAME = "EBA"
-PASSWORD = "EBA2026"
+USERNAME = ""
+PASSWORD = ""
 EXE_PATH = r"C:\Program Files (x86)\SteelProjects\Sp.Plm\Sp.Plm.exe"
 IMPORT_DIRECTORY = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\02XY"
 AFFAIRE = IMPORT_DIRECTORY.split("\\")[-1]   # transmise à claude pour la comparaison

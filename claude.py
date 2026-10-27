@@ -18,21 +18,35 @@ from pywinauto.keyboard import send_keys
 # à fichiers_affaire() et dossier_sortie_affaire().
 DOSSIER_PROJETS = r"C:\Users\E.BENAMOR\Desktop\projetTravailler"
 DOSSIER_PROJETS_A_TRAVAILLER = r"C:\Users\E.BENAMOR\Desktop\projetsATravailler"
-
+DOSSIER_CROQUIS= r"Y:\{affaire}-IRISOLARIS\4.DOSSIER DE FABRICATION\STRUCTURE\CROQUIS\DEBITAGE"
 FICHIER_FER_PLAT = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\FER PLAT.xlsx"
 AFFAIRE = "02XY"
 CLAUDE_APP_USER_MODEL_ID = "Claude_pzs8sxrjxfjjc!Claude"
 
 
+
+
+
+def trouver_croquis(affaire):
+    # Croquis de débitage : d'abord sur le lecteur Y: (nom « CROQUIS DEBITAGE.PDF »),
+    # puis dans projetsATravailler\<affaire> (nom « CROQUIS DEBITAGE <affaire>.pdf »)
+    candidats = [
+        os.path.join(DOSSIER_CROQUIS.format(affaire=affaire), "CROQUIS DEBITAGE.PDF"),
+        os.path.join(DOSSIER_PROJETS_A_TRAVAILLER, affaire, f"CROQUIS DEBITAGE {affaire}.pdf"),
+    ]
+    for chemin in candidats:
+        if os.path.exists(chemin):
+            return chemin
+    return candidats[0]  # chemin renvoyé dans le message d'erreur si aucun n'existe
+
+
 def fichiers_affaire(affaire, pdf_plm=None):
-    dossier_croquis = os.path.join(DOSSIER_PROJETS_A_TRAVAILLER, affaire)
     dossier_plm = os.path.join(DOSSIER_PROJETS, affaire)
     return [
-        os.path.join(dossier_croquis, f"CROQUIS DEBITAGE {affaire}.pdf"),
+        trouver_croquis(affaire),
         pdf_plm or os.path.join(dossier_plm, f"{affaire} PLM.pdf"),
         FICHIER_FER_PLAT,
     ]
-
 def dossier_sortie_affaire(affaire):
     return os.path.join(DOSSIER_PROJETS, affaire, "rapport")
 

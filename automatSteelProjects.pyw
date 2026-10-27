@@ -20,8 +20,8 @@ import pp
 from conversion_fer_plat import convertir_fers_plats
 
 # ===== CONFIGURATION (valeurs par défaut, modifiables dans l'interface) =====
-USERNAME = "EBA"
-PASSWORD = "EBA2026"
+USERNAME = ""
+PASSWORD = ""
 
 EXE_PATH = r"C:\Program Files (x86)\SteelProjects\Sp.Plm\Sp.Plm.exe"
 DOSSIER_PROJETS_DEFAUT = r"C:/Users/E.BENAMOR/Desktop/projetsAtravailler"
