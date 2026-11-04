@@ -34,9 +34,9 @@ def est_tole(profil):
     )
 
 def est_fer_plat(profil):
-    return claude.normaliser(profil).strip().startswith(
-        ("fp", "fer plat")
-    )
+    # Le profil retenu s'écrit « FP10*80 », « fer plat … » ou « plat/tôle FP10*80 » (libellé du classeur)
+    texte = claude.normaliser(profil).strip()
+    return bool(re.search(r"(^|[^a-z0-9])fp\s*\d", texte)) or "fer plat" in texte
 
 def est_entete_profil_origine(texte):
     nom = am.cle_entete(texte)

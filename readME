@@ -1,3 +1,26 @@
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+
+Configuration pour un autre PC
+-------------------------------
+1. Copier config.example.ini en config.ini dans le dossier du projet.
+2. Modifier les chemins de config.ini selon le nouveau PC. Les dossiers Desktop
+   peuvent utiliser %USERPROFILE%. Pour un lecteur réseau, utiliser son chemin
+   UNC si la lettre (par exemple Y:) n'est pas disponible sur ce PC.
+3. Lancer cam3D_PLM.pyw. Choisir le dossier source des projets et vérifier le
+   chemin de l'exécutable Steel Projects dans l'interface.
+4. Entrer l'identifiant et le mot de passe dans l'interface au lancement.
+
+config.ini est local et ignoré par Git : ne pas le partager s'il contient des
+informations propres au poste. Les chemins configurables sont le dossier
+d'enregistrement des rapports, le dossier source, les croquis et le classeur
+des fers plats. Le mot de passe n'est pas enregistré dans config.ini.
+
+Get-StartApps | Where-Object { $_.Name -like "*Claude*" }
+
+Copy-Item config.example.ini config.ini
+notepad config.ini
+
+py -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt

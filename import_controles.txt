@@ -1,0 +1,88 @@
+Nombre de fenêtres « Import » sous Steel Projects : 1
+
+=== Fenêtre « Import » n°1 ===
+Position : x=672-1248 y=338-701
+Visible : True
+Window       auto_id='FormProfileComparison' texte='Import'                                 valeur=''           x=222-1698 y=320-720
+Pane         auto_id='pnlPrincipal' texte=''                                       valeur=''           x=230-1690 y=351-671
+Pane         auto_id='panelEx1'     texte=''                                       valeur=''           x=230-1690 y=351-671
+Table        auto_id='dgvProfileComparison' texte='DataGridView'                           valeur=''           x=235-1685 y=401-665
+Custom       auto_id=''             texte='Ligne du haut'                          valeur=''           x=235-1684 y=401-425
+Header       auto_id='428060118'    texte='Profil'                                 valeur=''           x=237-357 y=401-425
+Header       auto_id='425432205'    texte='Catégorie'                              valeur=''           x=357-417 y=401-425
+Header       auto_id='4248889850'   texte='Unité'                                  valeur=''           x=417-477 y=401-425
+Header       auto_id='4237355470'   texte='H'                                      valeur=''           x=477-527 y=401-425
+Header       auto_id='42654914'     texte='B'                                      valeur=''           x=527-577 y=401-425
+Header       auto_id='425894231'    texte='C'                                      valeur=''           x=577-627 y=401-425
+Header       auto_id='4253048087'   texte='A'                                      valeur=''           x=627-677 y=401-425
+Header       auto_id='427670737'    texte='E'                                      valeur=''           x=677-727 y=401-425
+Header       auto_id='421927776'    texte='R'                                      valeur=''           x=727-777 y=401-425
+Header       auto_id='4217349988'   texte='B1'                                     valeur=''           x=777-827 y=401-425
+Header       auto_id='4221932166'   texte='C1'                                     valeur=''           x=827-877 y=401-425
+Header       auto_id='4263171767'   texte='E1'                                     valeur=''           x=877-927 y=401-425
+Header       auto_id='4231674992'   texte='R1'                                     valeur=''           x=927-977 y=401-425
+Header       auto_id='4216639474'   texte='Catégorie'                              valeur=''           x=977-1037 y=401-425
+Header       auto_id='4215537542'   texte='Unité'                                  valeur=''           x=1037-1097 y=401-425
+Header       auto_id='425620158'    texte='H'                                      valeur=''           x=1097-1147 y=401-425
+Header       auto_id='4250581426'   texte='B'                                      valeur=''           x=1147-1197 y=401-425
+Header       auto_id='4252579650'   texte='C'                                      valeur=''           x=1197-1247 y=401-425
+Header       auto_id='423454809'    texte='A'                                      valeur=''           x=1247-1297 y=401-425
+Header       auto_id='4231093287'   texte='E'                                      valeur=''           x=1297-1347 y=401-425
+Header       auto_id='4211404133'   texte='R'                                      valeur=''           x=1347-1397 y=401-425
+Header       auto_id='4235528341'   texte='B1'                                     valeur=''           x=1397-1447 y=401-425
+Header       auto_id='4251319614'   texte='C1'                                     valeur=''           x=1447-1497 y=401-425
+Header       auto_id='4259223347'   texte='E1'                                     valeur=''           x=1497-1547 y=401-425
+Header       auto_id='4263248075'   texte='R1'                                     valeur=''           x=1547-1597 y=401-425
+Header       auto_id='4232361769'   texte='Sel'                                    valeur=''           x=1597-1627 y=401-425
+Custom       auto_id=''             texte='Ligne 0'                                valeur=''           x=237-1684 y=425-455
+Edit         auto_id='4236518691'   texte='Profil Ligne 0, Non trié.'              valeur='SHS80*4H'   x=237-357 y=425-455
+Edit         auto_id='4260232767'   texte='Catégorie Ligne 0'                      valeur='E'          x=357-417 y=425-455
+Edit         auto_id='425223998'    texte='Unité Ligne 0, Non trié.'               valeur='Métrique'   x=417-477 y=425-455
+Edit         auto_id='4247015983'   texte='H Ligne 0, Non trié.'                   valeur='80'         x=477-527 y=425-455
+Edit         auto_id='4220490669'   texte='B Ligne 0, Non trié.'                   valeur='80'         x=527-577 y=425-455
+Edit         auto_id='4250198296'   texte='C Ligne 0, Non trié.'                   valeur='(null)'     x=577-627 y=425-455
+Edit         auto_id='4249131481'   texte='A Ligne 0, Non trié.'                   valeur='4'          x=627-677 y=425-455
+Edit         auto_id='4239530145'   texte='E Ligne 0, Non trié.'                   valeur='(null)'     x=677-727 y=425-455
+Edit         auto_id='4220226985'   texte='R Ligne 0, Non trié.'                   valeur='8'          x=727-777 y=425-455
+Edit         auto_id='4247825138'   texte='B1 Ligne 0, Non trié.'                  valeur='(null)'     x=777-827 y=425-455
+Edit         auto_id='4227773061'   texte='C1 Ligne 0, Non trié.'                  valeur='(null)'     x=827-877 y=425-455
+Edit         auto_id='4248630964'   texte='E1 Ligne 0, Non trié.'                  valeur='(null)'     x=877-927 y=425-455
+Edit         auto_id='4235025494'   texte='R1 Ligne 0, Non trié.'                  valeur='(null)'     x=927-977 y=425-455
+Edit         auto_id='4246793998'   texte='Catégorie Ligne 0'                      valeur='S'          x=977-1037 y=425-455
+Edit         auto_id='4218492804'   texte='Unité Ligne 0, Non trié.'               valeur='Métrique'   x=1037-1097 y=425-455
+Edit         auto_id='4232217513'   texte='H Ligne 0, Non trié.'                   valeur='(null)'     x=1097-1147 y=425-455
+Edit         auto_id='4221522166'   texte='B Ligne 0, Non trié.'                   valeur='(null)'     x=1147-1197 y=425-455
+Edit         auto_id='4259481773'   texte='C Ligne 0, Non trié.'                   valeur='(null)'     x=1197-1247 y=425-455
+Edit         auto_id='4265573909'   texte='A Ligne 0, Non trié.'                   valeur='(null)'     x=1247-1297 y=425-455
+Edit         auto_id='4253294272'   texte='E Ligne 0, Non trié.'                   valeur='(null)'     x=1297-1347 y=425-455
+Edit         auto_id='429886408'    texte='R Ligne 0, Non trié.'                   valeur='(null)'     x=1347-1397 y=425-455
+Edit         auto_id='4221868813'   texte='B1 Ligne 0, Non trié.'                  valeur='(null)'     x=1397-1447 y=425-455
+Edit         auto_id='4262601592'   texte='C1 Ligne 0, Non trié.'                  valeur='(null)'     x=1447-1497 y=425-455
+Edit         auto_id='4226543418'   texte='E1 Ligne 0, Non trié.'                  valeur='(null)'     x=1497-1547 y=425-455
+Edit         auto_id='4237564172'   texte='R1 Ligne 0, Non trié.'                  valeur='(null)'     x=1547-1597 y=425-455
+CheckBox     auto_id='422533231'    texte='Sel Ligne 0'                            valeur=''           x=1597-1627 y=425-455
+Pane         auto_id='pnlDatabase'  texte=''                                       valeur=''           x=978-1594 y=363-395
+Pane         auto_id='labelX2'      texte='Base de Données'                        valeur=''           x=978-1594 y=363-395
+Pane         auto_id='pnlImport'    texte=''                                       valeur=''           x=357-973 y=363-395
+Pane         auto_id='labelX1'      texte='Import'                                 valeur=''           x=357-973 y=363-395
+Pane         auto_id='stateBar'     texte='bar1'                                   valeur=''           x=230-1690 y=671-712
+Button       auto_id=''             texte='Ok'                                     valeur=''           x=1627-1688 y=675-710
+TitleBar     auto_id=''             texte=''                                       valeur=''           x=246-1690 y=323-351
+MenuBar      auto_id='MenuBar'      texte='Système'                                valeur=''           x=230-252 y=328-350
+MenuItem     auto_id=''             texte='Système'                                valeur=''           x=230-252 y=328-350
+Button       auto_id=''             texte='Réduire'                                valeur=''           x=1551-1598 y=321-351
+Button       auto_id=''             texte='Agrandir'                               valeur=''           x=1598-1644 y=321-351
+Button       auto_id=''             texte='Fermer'                                 valeur=''           x=1644-1691 y=321-351
+Pane         auto_id='panelEx4'     texte=''                                       valeur=''           x=680-1240 y=369-649
+Edit         auto_id='rtbCompteRendu' texte=''                                       valeur='*** Import ***\r\n\r\n*** Traitement ***\r\nTraitement Material\r\nTraitement Treatment\r\nTraitement Painting\r\nTraitement Profile\r\n' x=691-1228 y=415-645
+ScrollBar    auto_id='NonClientVerticalScrollBar' texte='Vertical'                               valeur=''           x=1210-1227 y=416-644
+Button       auto_id='UpButton'     texte='Ligne vers le haut'                     valeur=''           x=1210-1227 y=416-433
+Button       auto_id='DownButton'   texte='Ligne vers le bas'                      valeur=''           x=1210-1227 y=627-644
+Pane         auto_id='pgbTraitement' texte='Traitement des données CAM (3%)'        valeur=''           x=691-1228 y=380-403
+ToolBar      auto_id='bar1'         texte='bar1'                                   valeur=''           x=680-1240 y=649-693
+Button       auto_id=''             texte='Ok'                                     valeur=''           x=1121-1181 y=652-692
+Button       auto_id=''             texte='Log'                                    valeur=''           x=1181-1239 y=652-692
+TitleBar     auto_id=''             texte=''                                       valeur=''           x=696-1240 y=341-369
+MenuBar      auto_id='MenuBar'      texte='Système'                                valeur=''           x=680-702 y=346-368
+MenuItem     auto_id=''             texte='Système'                                valeur=''           x=680-702 y=346-368
+Button       auto_id=''             texte='Fermer'                                 valeur=''           x=1207-1241 y=339-369

@@ -1,21 +1,22 @@
+import os
+
 from pywinauto import Desktop
 from pywinauto.application import Application
 from pywinauto.timings import TimeoutError, wait_until
 from pywinauto.keyboard import send_keys
 
+import configuration
 
 import time
 
 # CONFIGURATION
 
-USERNAME = "EBA"
-PASSWORD = "EBA2026"
-
-EXE_PATH = r"C:\SteelProjects\Sp.Plm\Sp.Plm.exe"
-
-IMPORT_DIRECTORY = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\02XY"
-
-AFFAIRE =  IMPORT_DIRECTORY.split("\\")[-2]
+CHEMINS = configuration.charger_chemins()
+USERNAME = os.environ.get("STEEL_PROJECTS_USERNAME", "")
+PASSWORD = os.environ.get("STEEL_PROJECTS_PASSWORD", "")
+EXE_PATH = CHEMINS["steel_projects_exe"]
+IMPORT_DIRECTORY = os.path.join(CHEMINS["dossier_sources"], "02XY")
+AFFAIRE = os.path.basename(os.path.normpath(IMPORT_DIRECTORY))
 
 # Lancer Steel Projects
 

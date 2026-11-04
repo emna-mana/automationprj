@@ -23,16 +23,18 @@ import claude
 import affectation_machine
 import corection_scribing
 import pp
+import configuration
 from conversion_fer_plat import convertir_fers_plats
 
 DESKTOP = Desktop(backend="uia")
 
 # ===== CONFIGURATION (valeurs par défaut, modifiables dans l'interface) =====
-USERNAME = ""
-PASSWORD = ""
+USERNAME = "EBA"
+PASSWORD = "EBA2026"
 
-EXE_PATH = r"C:\Program Files (x86)\SteelProjects\Sp.Plm\Sp.Plm.exe"
-DOSSIER_PROJETS_DEFAUT = r"C:/Users/E.BENAMOR/Desktop/projetsAtravailler"
+CHEMINS = configuration.charger_chemins()
+EXE_PATH = CHEMINS["steel_projects_exe"]
+DOSSIER_PROJETS_DEFAUT = CHEMINS["dossier_sources"]
 
 PHASE_MIN = 130
 PHASE_MAX = 140
@@ -41,7 +43,7 @@ COMMENTAIRE_2 = "PU"
 PHASE_SEUIL_GR = 700     # phases strictement supérieures à ce seuil
 COMMENTAIRE_GR = "GR"    # commentaire 2 des repères secondaires dont le profil contient « _ »
 
-DOSSIER_PROJETS_TRAVAILLER = claude.DOSSIER_PROJETS  # même dossier que celui lu par claude
+DOSSIER_PROJETS_TRAVAILLER = CHEMINS["dossier_projets"]
 
 COMPARAISON_CLAUDE = True    # comparaison avec Claude après l'impression
 CORRECTION_SCRIBING = True   # correction du scribing des repères « _ » (Ctrl+D)
@@ -50,6 +52,7 @@ CONVERSION_FERS_PLATS = True # conversion des tôles retenues en fers plats
 FORMAT_IMPORT = "TEKLA_XML"
 
 FICHIER_LOG = "workflow_steel_projects.log"
+
 
 # Titres des fenêtres (regroupés ici pour être corrigés facilement)
 TITRE_GESTION_AFFAIRES = "Gestion d'Affaires"
@@ -155,7 +158,6 @@ def lister_fichiers_cam3d(dialogue):
         if nom.lower().endswith(".tsm"):
             fichiers.add(nom)
     return sorted(fichiers) or None
-
 
 def importer_cam3d_projet(window, dossier_projet):
     fichiers_dossier = [
@@ -321,6 +323,7 @@ def appliquer_configuration(cfg):
     USERNAME = cfg["utilisateur"]
     PASSWORD = cfg["mot_de_passe"]
     EXE_PATH = cfg["exe"]
+    claude.DOSSIER_PROJETS_A_TRAVAILLER = cfg["dossier_sources"]
     PHASE_MIN = cfg["phase_min"]
     PHASE_MAX = cfg["phase_max"]
     COMMENTAIRE_2 = cfg["commentaire_2"]
@@ -414,6 +417,7 @@ class InterfaceWorkflow(tk.Tk):
         configurer_journal(self.messages)
         self.protocol("WM_DELETE_WINDOW", self._a_la_fermeture)
         self.after(100, self._traiter_messages)
+        self.actualiser_projets()   # liste les projets du dossier dès l'ouverture
 
     def _construire_interface(self):
         style = ttk.Style(self)
@@ -621,6 +625,7 @@ class InterfaceWorkflow(tk.Tk):
         cfg = self._lire_parametres()
         if cfg is None:
             return
+        cfg["dossier_sources"] = self.var_dossier.get().strip()
         if not messagebox.askyesno("Confirmation",
                                    f"Lancer le traitement de {len(projets)} projet(s) ?", parent=self):
             return

@@ -1,7 +1,9 @@
 import ctypes
+import logging
 import operator
 import os
 from datetime import datetime
+import re
 import time
 
 
@@ -17,15 +19,19 @@ import affectation_machine
 from conversion_fer_plat import convertir_fers_plats
 import corection_scribing
 import claude
+import configuration
 
+log = logging.getLogger("workflow")
 
 # ===== CONFIGURATION =====
-USERNAME = ""
-PASSWORD = ""
-EXE_PATH = r"C:\Program Files (x86)\SteelProjects\Sp.Plm\Sp.Plm.exe"
-IMPORT_DIRECTORY = r"C:\Users\E.BENAMOR\Desktop\projetsAtravailler\02XY"
-AFFAIRE = IMPORT_DIRECTORY.split("\\")[-1]   # transmise à claude pour la comparaison
-DOSSIER_PROJETS_TRAVAILLER = claude.DOSSIER_PROJETS  # même dossier que celui lu par claude
+USERNAME = "eba"
+PASSWORD = "EBA2026"
+CHEMINS = configuration.charger_chemins()
+EXE_PATH = CHEMINS["steel_projects_exe"]
+IMPORT_DIRECTORY = os.path.join(CHEMINS["dossier_sources"], "TT")
+AFFAIRE = os.path.basename(os.path.normpath(IMPORT_DIRECTORY))  # transmise à claude pour la comparaison
+DOSSIER_PROJETS_TRAVAILLER = CHEMINS["dossier_projets"]
+PATRON_JARRET = re.compile(r"^\S+_\d+(\.\d+)?$")
 PHASE_MIN = 130
 PHASE_MAX = 140
 COMMENTAIRE_2 = "PU"
@@ -348,32 +354,184 @@ def s_authentifier(window):
     splash.wait_not("exists", timeout=180, retry_interval=0.5)
     attendre_appli(window, timeout=120)
 
+def trouver_fenetre(window, titre_re, timeout=60):
+    # Une boîte de dialogue peut être une fenêtre séparée ou un enfant de Steel Projects
+    def visible():
+        for f in (window.child_window(title_re=titre_re),
+                  DESKTOP.window(title_re=titre_re, top_level_only=True)):
+            try:
+                if f.exists(timeout=0) and f.is_visible():
+                    return f
+            except COMError:
+                pass   # appli occupée : on réessaie
+        return None
+
+    return wait_until(timeout, 0.5, visible, None, operator.is_not)
+
+
+def lignes_profil_strict(fenetre):
+    # Une entrée par ligne : (« Ligne N », {colonne: valeur lue}, bouton Ajouter de la ligne)
+    boutons = {b.window_text().strip(): b for b in fenetre.descendants(control_type="Button")
+               if b.window_text().strip().startswith("Ligne ")}
+    lignes = {}
+    for e in fenetre.descendants(control_type="Edit"):
+        m = re.match(r"^(Profil dans le fichier importé|Importer en tant que) (Ligne \d+)", e.window_text())
+        if m:
+            try:
+                valeur = (e.get_value() or "").strip()
+            except Exception as exc:
+                valeur = f"<lecture impossible : {exc!r}>"
+            lignes.setdefault(m.group(2), {})[m.group(1)] = valeur
+    return [(ligne, colonnes, boutons.get(ligne)) for ligne, colonnes in lignes.items()]
+
+def valider_profils_stricts(window, timeout=60):
+    # Fenêtre « Profil Strict » : chaque jarret non encore ajouté reçoit un clic sur Ajouter
+    # (bouton en bout de ligne) ; puis Ok. Renvoie False si la fenêtre n'apparaît pas.
+    try:
+        dialogue = trouver_fenetre(window, r"Profil Strict", timeout=timeout)
+    except DelaiDepasse:
+        return False
+    attendre(dialogue, "exists visible", timeout=30)
+    fenetre = dialogue.wrapper_object()
+
+    ajoutes = 0
+    for _ in range(50):  # garde-fou : une ligne qui ne se valide pas ne doit pas boucler indéfiniment
+        a_ajouter = None
+        for ligne, colonnes, bouton in lignes_profil_strict(fenetre):
+            profil = colonnes.get("Profil dans le fichier importé", "")
+            importer = colonnes.get("Importer en tant que", "")
+            non_traite = importer in ("", "(null)")   # la grille affiche « (null) » pour une cellule vide
+            if PATRON_JARRET.match(profil) and non_traite and bouton is not None:
+                a_ajouter = (ligne, profil, bouton)
+                break
+        if a_ajouter is None:
+            break
+        ligne, profil, bouton = a_ajouter
+        print(f"Profil strict : {ligne}, jarret {profil}, ajout")
+        bouton.click_input()
+        ajoutes += 1
+        time.sleep(1)
+    else:
+        raise RuntimeError("Profil Strict : un jarret reste non ajouté après 50 essais")
+
+    print(f"Profil strict : {ajoutes} jarret(s) ajouté(s)")
+    cliquer(dialogue.child_window(title="Ok", control_type="Button"))
+    dialogue.wait_not("exists visible", timeout=60, retry_interval=0.5)
+    return True
+
+def attendre_une_des_fenetres(window, titres_re, timeout=600):
+    # Attend qu'une des fenêtres (titres en expressions régulières) soit visible ; renvoie son motif
+    def visible():
+        for titre_re in titres_re:
+            for f in (window.child_window(title_re=titre_re),
+                      DESKTOP.window(title_re=titre_re, top_level_only=True)):
+                try:
+                    if f.exists(timeout=0) and f.is_visible():
+                        return titre_re
+                except COMError:
+                    pass
+        return None
+
+    return wait_until(timeout, 0.5, visible, None, operator.is_not)
+def lister_fenetres_ouvertes():
+    # Journalise le titre de chaque fenêtre ouverte (diagnostic en cas de blocage)
+    for w in DESKTOP.windows(top_level_only=True):
+        try:
+            log.info("Fenêtre ouverte : %r", w.window_text())
+        except COMError:
+            pass
+
+
+def attendre_une_des_fenetres(window, titres_re, timeout=600):
+    # Attend qu'une des fenêtres (titres en expressions régulières) soit visible ; renvoie son motif
+    def visible():
+        for titre_re in titres_re:
+            for f in (window.child_window(title_re=titre_re, control_type="Window"),
+                      DESKTOP.window(title_re=titre_re, control_type="Window", top_level_only=True)):
+                try:
+                    if f.exists(timeout=0) and f.is_visible():
+                        return titre_re
+                except COMError:
+                    pass
+        return None
+
+    try:
+        return wait_until(timeout, 0.5, visible, None, operator.is_not)
+    except DelaiDepasse:
+        log.error("Aucune des fenêtres attendues n'est apparue : %s", titres_re)
+        lister_fenetres_ouvertes()
+        raise
+def valider_comparaison_affaire(window, timeout=60):
+    # Fenêtre « Comparaison [Affaire] » : Ajouter (barre du haut), puis Ok. Renvoie False si elle n'apparaît pas.
+    try:
+        comparaison = trouver_fenetre(window, r"Comparaison \[.*\]", timeout=timeout)
+    except DelaiDepasse:
+        log.info("Pas de fenêtre « Comparaison [Affaire] »")
+        return False
+    log.info("Fenêtre « Comparaison [Affaire] » ouverte")
+
+    cliquer_sans_souris(comparaison.child_window(title="Ajouter", control_type="Button"))
+    log.info("Ajouter cliqué dans « Comparaison [Affaire] »")
+    cliquer_sans_souris(comparaison.child_window(title="Ok", control_type="Button"))
+    log.info("Ok cliqué dans « Comparaison [Affaire] »")
+    comparaison.wait_not("exists visible", timeout=60, retry_interval=0.5)
+    log.info("Fenêtre « Comparaison [Affaire] » fermée")
+    return True
+
 
 def importer_tekla(window, dossier_xml):
-    # Importe les fichiers XML Tekla du dossier donné et valide les fenêtres d'import
+    # Importe les fichiers XML Tekla du dossier donné ; journalise chaque étape
     chemin_xml = os.path.join(dossier_xml, "*.XML")
+    log.info("IMPORT XML : début, dossier %s", chemin_xml)
 
     bouton_import = window.child_window(title="Import", control_type="Button")
     cliquer(bouton_import)
+    log.info("Clic sur Import")
     cliquer_menu(bouton_import, "TEKLA_XML")
+    log.info("Choix du menu TEKLA_XML")
 
     tekla = DESKTOP.window(title_re=".*Importation Tekla.*")
     attendre(tekla, "exists visible")
+    log.info("Fenêtre « Importation Tekla » ouverte")
 
-    # Champ « Répertoire » : la fenêtre ne sélectionne les .XML que sur une vraie frappe clavier
+    # Le champ ne sélectionne les .XML que sur une vraie frappe clavier
     repertoire = tekla.child_window(title="Répertoire", auto_id="1001", control_type="Edit")
     saisir_texte(repertoire, chemin_xml)
+    log.info("Chemin saisi dans Répertoire")
 
     cliquer(tekla.child_window(title="Ok", auto_id="1", control_type="Button"))
+    log.info("Ok de « Importation Tekla » cliqué")
 
+    # Fenêtre « Ventilation des plans » : Ok
     ok_validation = window.child_window(title="Ok", control_type="Button", best_match="Button3")
     cliquer_avec_comparaison(window, ok_validation, timeout=600)
-    cliquer_avec_comparaison(window, window.child_window(title="Ajouter", control_type="Button"), timeout=3600)
-    cliquer_avec_comparaison(window, ok_validation, timeout=3600)
+    log.info("Ok de « Ventilation des plans » cliqué")
 
+    # Ensuite : comparaison de profils (titre « Import ») ou « Profil Strict »
+    suivante = attendre_une_des_fenetres(
+        window, (r"Profil Strict", r"^Import$"), timeout=600
+    )
+    log.info("Fenêtre suivante détectée : %s", suivante)
+
+    if suivante == r"^Import$":
+        comparaison_profils = window.child_window(auto_id="FormProfileComparison", control_type="Window")
+        attendre(comparaison_profils, "exists visible", timeout=30)
+        cliquer_sans_souris(comparaison_profils.child_window(title="Ok", control_type="Button"))
+        log.info("Ok de la comparaison de profils cliqué")
+        comparaison_profils.wait_not("exists visible", timeout=60, retry_interval=0.5)
+        log.info("Comparaison de profils fermée")
+
+    # « Profil Strict » : absente, la fonction renvoie False sans erreur
+    if valider_profils_stricts(window, timeout=20):
+        log.info("Profil Strict traité")
+
+    # Fenêtre « Comparaison [Affaire] » : Ajouter, puis Ok
+    valider_comparaison_affaire(window, timeout=60)
+
+    log.info("Validation finale (FormConfigLog)")
     finir_import(window)
-
-
+    log.info("IMPORT XML : terminé")
+    
 def finir_import(window, timeout=3600):
     # Attend la fin de l'import (la comparaison de profils est validée si elle apparaît),
     # puis clique sur Ok final
@@ -435,7 +593,8 @@ def filtrer_par_affaire(window, timeout=30):
             for tb in window.wrapper_object().descendants(control_type="ToolBar"):
                 if tb.automation_id() == "toolBar" and tb.is_visible():
                     edits = tb.children(control_type="Edit")
-                    if edits and edits[0].is_visible():
+                    # Visible ne suffit pas : après le retour de la comparaison, le champ peut encore être grisé
+                    if edits and edits[0].is_visible() and edits[0].is_enabled():
                         return edits[0]
         except COMError:
             pass  # appli occupée : on réessaie
@@ -734,7 +893,6 @@ def main_complet():
     commentaire_gr(window)
     quitter_gestion_production(window)
     chemin_pdf = impression(window)
-    chemin_pdf = r"C:\Users\E.BENAMOR\Desktop\projetTravailler\02XY\02XY PLM.pdf"
     fermer_pdf_ouverts(chemin_pdf)
     fermer_apercu()
     revenir_steel_projects(window)
@@ -767,4 +925,5 @@ def main_complet():
 
 
 if __name__ == "__main__":
-    main_complet()    
+    main_complet()
+    

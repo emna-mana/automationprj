@@ -4,7 +4,6 @@ import os
 from datetime import datetime
 import time
 
-
 from _ctypes import COMError
 from pywinauto import Desktop
 from pywinauto.application import Application
@@ -12,14 +11,16 @@ from pywinauto.keyboard import send_keys
 from pywinauto.timings import TimeoutError as DelaiDepasse
 from pywinauto.timings import wait_until
 from pywinauto.uia_defines import get_elem_interface
+import configuration
 
 # ===== CONFIGURATION =====
-USERNAME = "EBA"
-PASSWORD = "EBA2026"
-EXE_PATH = r"C:\Program Files (x86)\SteelProjects\Sp.Plm\Sp.Plm.exe"
-IMPORT_DIRECTORY = r"C:\Users\E.BENAMOR\Desktop\02XY"
-AFFAIRE = IMPORT_DIRECTORY.split("\\")[-1]
-DOSSIER_PROJETS_TRAVAILLER = r"C:\Users\E.BENAMOR\Desktop\projetTravailler"
+CHEMINS = configuration.charger_chemins()
+USERNAME = os.environ.get("STEEL_PROJECTS_USERNAME", "")
+PASSWORD = os.environ.get("STEEL_PROJECTS_PASSWORD", "")
+EXE_PATH = CHEMINS["steel_projects_exe"]
+IMPORT_DIRECTORY = os.path.join(CHEMINS["dossier_sources"], "02XY")
+AFFAIRE = os.path.basename(os.path.normpath(IMPORT_DIRECTORY))
+DOSSIER_PROJETS_TRAVAILLER = CHEMINS["dossier_projets"]
 
 PHASE_MIN = 130
 PHASE_MAX = 140

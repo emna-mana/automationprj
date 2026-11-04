@@ -1,3 +1,9 @@
+from configuration import charger_chemins
+p = charger_chemins()["fichier_trusquinage_A164"]
+print(repr(p))
+print("longueur :", len(p))
+import os
+print("existe :", os.path.exists(p))
 # from pywinauto import Desktop
 # import time
 # import io
@@ -30,28 +36,51 @@
 # f.close()
 
 #----------------------------------------------------------------------------------------
-# import sys
 # from pywinauto import Desktop
 
-# # Affichage correct des accents dans la console
-# sys.stdout.reconfigure(encoding="utf-8")
+# DESKTOP = Desktop(backend="uia")
+# SORTIE = r"C:\automationprj\import_controles.txt"
+# lignes = []
 
-# # Connexion à la fenêtre déjà ouverte
-# desktop = Desktop(backend="uia")
-# window = desktop.window(title_re=".*Steel Projects - Gestion de production.*")
-# window.wait("exists visible", timeout=30)
+# principale = DESKTOP.window(title="Steel Projects", top_level_only=True)
 
-# # Grille des phases
-# grille = window.child_window(auto_id="dgvData", control_type="Table")
-# grille.wait("exists visible", timeout=30)
+# imports = principale.children(title="Import", control_type="Window")
+# lignes.append(f"Nombre de fenêtres « Import » sous Steel Projects : {len(imports)}")
+# lignes.append("")
 
-# # Structure de la grille (titres, types, hiérarchie)
-# grille.print_control_identifiers(depth=2)
+# for n, fenetre in enumerate(imports, start=1):
+#     lignes.append(f"=== Fenêtre « Import » n°{n} ===")
+#     try:
+#         r = fenetre.rectangle()
+#         lignes.append(f"Position : x={r.left}-{r.right} y={r.top}-{r.bottom}")
+#         lignes.append(f"Visible : {fenetre.is_visible()}")
+#     except Exception as exc:
+#         lignes.append(f"<erreur fenêtre {exc!r}>")
+#     for e in fenetre.descendants():
+#         info = e.element_info
+#         try:
+#             texte = e.window_text()
+#         except Exception as exc:
+#             texte = f"<erreur {exc!r}>"
+#         try:
+#             valeur = e.get_value() if info.control_type == "Edit" else ""
+#         except Exception:
+#             valeur = ""
+#         try:
+#             r = e.rectangle()
+#             pos = f"x={r.left}-{r.right} y={r.top}-{r.bottom}"
+#         except Exception:
+#             pos = "x=? y=?"
+#         lignes.append(
+#             f"{info.control_type:<12} auto_id={info.automation_id!r:<14} "
+#             f"texte={texte!r:<40} valeur={valeur!r:<12} {pos}"
+#         )
+#     lignes.append("")
 
-# # Puis les valeurs des cellules
-# for ligne in grille.children(control_type="Custom"):
-#     for c in ligne.children(control_type="Edit"):
-#         print(c.window_text(), "=", c.get_value())
+# with open(SORTIE, "w", encoding="utf-8") as f:
+#     f.write("\n".join(lignes))
+# print("\n".join(lignes[:20]))
+# print("\nFichier écrit :", SORTIE)
 # ----------------------------------------------------------------------------------------
 # script d'inspection, avec la fenêtre « Repère Secondaire »
 # ----------------------------------------------------------------------------------------

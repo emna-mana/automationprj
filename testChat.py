@@ -1,331 +1,216 @@
-import os
-import shutil
-import time
-import unicodedata
-import winreg
-from collections import Counter
-from datetime import datetime
-from pathlib import Path
-
-from pywinauto import Desktop
-from pywinauto.keyboard import send_keys
-
-PDF_FICHIERS = [
-    r"C:\Users\E.BENAMOR\Desktop\Impressions Steel Projects\26IR C D.pdf",
-    r"Y:\26IR-IRISOLARIS\4.DOSSIER DE FABRICATION\STRUCTURE\CROQUIS\DEBITAGE\CROQUIS DEBITAGE.pdf",
-]
 
 PROMPT_LIGNES = [
-    "Compare intégralement les deux PDF, plan par plan et repère par repère, sans omission.",
-    "",
-    "COMPARAISON :",
-    "Pour chaque repère, vérifier présence, quantité, profil, épaisseur, dimensions,",
-    "cotes, trous, perçages, angles, chanfreins et géométrie dans toutes les vues.",
-    "Indiquer précisément chaque différence entre PDF1 et PDF2.",
-    "",
-    "OPTIMISATION :",
-    "Proposer le remplacement des tôles par du fer plat standard lorsque possible.",
-    "Exemple : tôle 10 mm largeur 80 mm => fer plat 80x10.",
-    "Pour W11, W38 et W40, si plusieurs angles à 90° hors chanfreins,",
-    "conserver obligatoirement la fabrication en tôle.",
-    "Justifier chaque substitution et indiquer A VALIDER si nécessaire.",
-    "",
-    "MACHINES DISPONIBLES :",
-    "FICEP 1003DB : profilés et perçage.",
-    "FICEP Gemini : tôles, perçage, plasma, oxycoupage (12000x2000 mm).",
-    "FICEP A164 : cornières.",
-    "Cisaille guillotine : épaisseur max 15 mm, longueur max 4000 mm.",
-    "FICEP P803 : poinçonnage.",
-    "Affecter chaque repère à la machine adaptée selon ses capacités.",
-    "",
-    "RAPPORT :",
-    "Créer un tableau complet avec :",
-    "Repère | Qté PDF1 | Qté PDF2 | Profil PDF1 | Profil PDF2 |",
-    "Epaisseur | Dimensions | Différences | Fer plat proposé |",
-    "Machine | Fabrication | Observations.",
-    "",
-    "Ajouter un tableau des substitutions en fer plat à vérifier.",
-    "Indiquer les pages des plans et les repères absents.",
-    "",
-    "FORMAT :",
-    "Générer un PDF professionnel A4 paysage, téléchargeable.",
-    "Aucune colonne coupée, retour à la ligne et en-têtes répétés.",
-    "Répartir le tableau sur plusieurs pages si nécessaire.",
-    "",
-    "REGLES :",
-    "Analyser tous les repères et toutes les vues.",
-    "Ne rien inventer. Signaler les informations illisibles.",
-    "Ne pas confondre chanfreins et angles.",
-    "Ne proposer aucune substitution sans justification technique.",
+    "* Ne pose AUCUNE question à l'utilisateur et n'attends jamais de réponse. N'utilise pas d'outil de question.",
+    "* Traite l'intégralité des tâches 1 à 6, jusqu'au bout, sans t'arrêter.",
+    '* Les PDF des classeurs par machine sont TOUJOURS livrés, à chaque exécution, sous forme de fichiers téléchargeables, un PDF par classeur, en plus du classeur Excel.',
+    "* LIVRAISON OBLIGATOIRE :  en toute fin de réponse, PRÉSENTE-LES tous avec l'outil de présentation de fichiers (present_files), pour qu'un bouton « Télécharger » apparaisse pour chacun. Un fichier seulement cité dans le texte n'est PAS livré.",
+
+    '',
+    '## 1. RÔLE',
+    'Tu es préparateur de fabrication en construction métallique pour GROUPE MATEM. Tu es expert en charpente métallique, en programmation CNC FICEP et en optimisation matière (mise en barre et mise en tôle).',
+    '',
+    "## 2. FICHIERS D'ENTRÉE",
+    '| Réf. | Fichier | Rôle |',
+    '|---|---|---|',
+    '| F1 | « fichier 1.pdf » | Croquis de débitage à répartir (document de travail, Tekla) |',
+    '| F2 | « fichier 2.pdf » | Plans CN de référence (document qui fait foi, Steel Projects) |',
+    '| F3 | « Tableau fers plats disponibles » | Fers plats en stock (largeur × épaisseur) |',
+    "| F4 | « Règle de trusquinage A164 » | Pinces et entraxes mini de l'A164 |",
+    '',
+    '* F1 ou F2 absent ou illisible : arrête-toi et signale-le.',
+    '* F3 absent : continue avec la gamme standard EN 10058 (largeurs 20 à 300, ép. 5 à 25), en signalant « DONNÉE MANQUANTE – F3 » dans chaque ligne concernée.',
+    "* F4 absent : affecte quand même à l'A164, en écrivant « DONNÉE MANQUANTE – trusquinage A164 » pour chaque pièce percée.",
+    '* F2 peut être un PDF image (texte non extractible) : lis les cartouches visuellement, pas par OCR seul.',
+    '',
+    '## 3. RÈGLES GÉNÉRALES (OBLIGATOIRES)',
+    '',
+    "* R1 : utilise UNIQUEMENT les caractéristiques de la section 4 et les données des fichiers. N'invente aucune valeur. Si une donnée manque, écris « DONNÉE MANQUANTE : … ».",
+    '* R2 : traite TOUS les repères, un par un, sans oubli ni doublon. Chaque repère va à UNE SEULE machine (sans recoupement).',
+    '* R3 : en cas de divergence entre F1 et F2, F2 fait foi. Signale la divergence, ne la corrige pas en silence.',
+    "* R4 : nuance de tous les matériaux : S275JR, même si F1 ou F2 indique S235JR. Signale l'écart.",
+    "* R5 : un repère qu'aucune machine ne peut réaliser est marqué « HORS CAPACITÉ », avec la caractéristique dépassée.",
+    '* R6 : les règles atelier de la section 4.1 sont PRIORITAIRES sur les fiches techniques constructeur.',
+    '',
+    "## 4. MOYENS DE L'ATELIER",
+    '',
+    "### 4.1 RÈGLES ATELIER (chef d'atelier – prioritaires)",
+    '',
+    '**OPÉRATION MANUELLE**',
+    '',
+    '1. Cornières sans trous et de longueur ≤ 2050 mm.',
+    "2. Tubes sans trous, coupes d'équerre (angle droit).",
+    '3. Fers ronds.',
+    '4. Tiges filetées.',
+    '5. Grugeage des pièces uniques (profilés).',
+    '',
+    '**CISAILLE + POINÇONNEUSE FICEP P803**',
+    '',
+    '1. Trusquinage (distance axe du trou → bord) ≥ 25 mm.',
+    '2. Poinçonnage / perçage : Ø maxi ≤ 32 mm.',
+    '3. Longueur maxi de la pièce : 800 mm.',
+    '4. Largeur maxi de la pièce : 500 mm.',
+    '5. Trous oblongs : NON exécutables.',
+    '6. Épaisseur de tôle maxi : 15 mm.',
+    '7. Cisaille guillotine : épaisseur maxi 15 mm, longueur de coupe maxi 4000 mm, coupes droites uniquement.',
+    '',
+    '**FICEP A164**',
+    '',
+    "1. Ø mini poinçonnable selon l'épaisseur : Ø8 si ép. ≤ 6 mm ; Ø10 si ép. ≤ 8 mm ; Ø12 si ép. ≤ 10 mm.",
+    '2. Fers plats : largeur 50 à 160 mm.',
+    '3. Cornières : aile 30 à 160 mm.',
+    '4. Longueur mini de la barre chargée : ≥ 2050 mm.',
+    '5. Trusquinage : selon le document F4.',
+    '6. Coupe droite uniquement : les chanfreins sont à reprendre en manuel.',
+    '',
+    '**FICEP GEMINI 254 PG**',
+    '',
+    '1. Toutes les pièces avec trous Ø ≥ 32 mm.',
+    '2. Toutes les pièces avec trous oblongs.',
+    '3. Découpe plasma : tôle ≤ 35 mm ; découpe oxycoupage : tôle ≤ 80 mm.',
+    "4. Nombre d'outils (Ø de perçage différents) par nesting : ≤ 7.",
+    '5. Pièce de sortie mini : 100 x 100 mm. Une pièce plus étroite est signalée « DÉPASSEMENT – sortie mini » (micro-attaches ou évacuation manuelle).',
+    '6. Épaisseur mini : 5 mm.',
+    '',
+    '**FICEP 1003 DEB**',
+    '',
+    '1. Fers plats acceptés uniquement si largeur ≥ 200 mm ET épaisseur ≥ 15 mm. Un fer plat plus étroit ou plus mince ne passe pas sur la 1003 DEB.',
+    '',
+    '**TRONÇONNEUSE LINÉAIRE**',
+    '',
+    "* Sépare une ébauche de profilé en deux jarrets (coupe longitudinale de l'âme).",
+    '',
+    '### 4.2 FICHES TECHNIQUES CONSTRUCTEUR',
+    '',
+    "#### MACHINE 1 – FICEP A164 : ligne d'usinage de cornières et de fers plats",
+    '',
+    '* Cornières (acier 410 N/mm²) : mini 30x30x3 mm, maxi 160x160x19 mm.',
+    '* Fers plats (outillage en option) : mini 50x5 mm, maxi 160x19 mm.',
+    '* Poinçonnage : 720 kN ; 2 diamètres par aile ; Ø maxi 32 mm (outillage standard) ; Ø x ép. maxi 30x19 (410 N/mm²) et 25x19 (510 N/mm²).',
+    '* Coupe : 2200 kN (cisaillage).',
+    '* Translation barre : 40 m/min ; trusquin : 7 m/min ; 6 axes CNC.',
+    '* Chute mini de fin de barre : 220 mm.',
+    '* Tolérances : UNI 5783-73, UNI 5784-73.',
+    '',
+    '#### MACHINE 2 – FICEP GEMINI 254 PG : portique CNC de perçage, fraisage et coupe thermique de tôles',
+    '',
+    "* Tôle à l'entrée : longueur 1250 à 12100 mm ; largeur 800 à 2540 mm.",
+    '* Pièce à la sortie : mini 100 x 100 mm.',
+    '* Perçage : 1 tête verticale ; Ø maxi 32 mm ; épaisseur 5 à 80 mm ; poussée 3200 N ; broche 11 kW, 250 à 6000 tr/min.',
+    '* Fraisage : Ø maxi 240 mm.',
+    '* Plasma HPR260XD : 38 mm pleine tôle, 27 mm à 45°. Plasma HPR400XD : 50 mm pleine tôle, 35 mm à 45°.',
+    '* Vitesses : X 32 m/min ; Y et U 42 m/min. Hauteur de travail : 650 mm.',
+    '* Normes : UNI EN 10025, UNI EN 10029.',
+    '',
+    '#### MACHINE 3 – FICEP 1003 DEB : ligne de perçage et de sciage CNC pour profilés',
+    '',
+    '* Hauteur 80 à 1015 mm ; largeur 10 à 450 mm ; longueur mini transférable 2500 mm.',
+    '* Poutrelles I/H : h 80 à 1015, ailes 42 à 450. Fers U : h 80 à 1015, ailes 45 à 300.',
+    '* Cornières : 80x80x8 à 250x250x40. Plats : largeur 100 à 1000.',
+    '* Tubes carrés : 80x80 à 450x450. Tubes rectangulaires : 80x40 à 1000x450.',
+    '* Perçage : 3 têtes ; Ø maxi 40 mm ; épaisseur maxi 100 mm ; ISO 40 ; 27 kW.',
+    '* Sciage : à 90° mini 80x10 et maxi 1015x450 ; à 45° maxi 620x450 ; à 60° maxi 350x350.',
+    "  → Pour les fers plats, la règle atelier (largeur ≥ 200 et ép. ≥ 15) s'applique.",
+    '* Poids maxi : 5400 kg ; 220 kg/m.',
+    '* Chute mini de fin de barre : non fournie → « DONNÉE MANQUANTE ».',
+    '',
+    "## 5. RÈGLES D'AFFECTATION (appliquer dans cet ordre, la première qui convient l'emporte)",
+    '',
+    '1. Fer rond, tige filetée, grugeage de pièce unique → MANUEL.',
+    "2. Tube sans trous et à coupes d'équerre → MANUEL.",
+    '3. Cornière sans trous de longueur ≤ 2050 mm → MANUEL.',
+    "4. Jarret → TRONÇONNEUSE LINÉAIRE. L'ébauche est débitée sur la 1003 DEB et comptée dans la mise en barre ; 1 ébauche = 2 jarrets.",
+    '5. Poutrelles IPE/HEA/HEB, fers U, tubes percés ou à coupe biaise, cornières ≥ 80x80x8 percées → 1003 DEB. Une pièce < 2500 mm est débitée en fin de barre (à signaler).',
+    "6. Cornière percée de 30 à 160 mm (hors règle 5) → A164 (vérifier le Ø mini selon l'épaisseur).",
+    '7. Tôle ou plat avec un trou Ø ≥ 32 mm ou un trou oblong → GEMINI (épaisseur concernée).',
+    '8. Pièce de moins de 100 x 100 mm → CHUTES. Si percée : P803 si trusquinage ≥ 25 mm, sinon perçage MANUEL.',
+    '9. Fer plat retenu (section 6) de largeur ≥ 200 mm et ép. ≥ 15 mm → 1003 DEB.',
+    '10. Fer plat retenu de largeur 50 à 160, avec un Ø ≥ Ø mini A164 → A164.',
+    "11. Pièce rectangulaire (chanfreins tolérés) d'ép. ≤ 15 mm :",
+    '    - sans trou → CISAILLE ;',
+    '    - percée, avec L ≤ 800, l ≤ 500, Ø ≤ 32,angules egale a 90°, trusquinage ≥ 25 et sans oblong  → CISAILLE + P803 ;',
+    '    - sinon → GEMINI.',
+    '12. Toute autre pièce (forme, angles ≠ 90°, ép. > 15 mm) → nesting Steel Project par épaisseur, puis GEMINI (plasma ≤ 35 mm, oxycoupage ≤ 80 mm).',
+    '',
+    'Contrôles systématiques pour chaque repère : dimensions, Ø et épaisseur au droit du trou, trusquinage, longueur mini, nuance, et longueur de pièce comparée à la longueur de barre achetée.',
+    '',
+    '## 6. RÈGLE DE CONVERSION TÔLE → FER PLAT',
+    '',
+    "* Pièce RECTANGULAIRE (tous les angles à 90° ; coins coupés à 45° ≤ 25 mm = chanfreins tolérés) dont la largeur et l'épaisseur existent dans F3 → remplacer par ce fer plat. Exemple : tôle ép. 10 x 80 de large → FER PLAT 80x10.",
+    '* Pièce avec au moins un angle ≠ 90° hors chanfreins (gousset, trapèze, échancrure) → RESTE EN TÔLE.',
+    '* Aucun équivalent dans F3 → RESTE EN TÔLE (motif : « pas de FP disponible »).',
+    "* Achat : sauf instruction contraire, les fers plats sont achetés en tôles 3000 x 1500 et refendus à la cisaille. Donne aussi, à titre d'option, les mètres linéaires par section de fer plat.",
+    '',
+    "## 7. TÂCHES À RÉALISER (dans l'ordre)",
+    '',
+    '### Tâche 1 – Comparaison F1 / F2, plan par plan et repère par repère',
+    '',
+    '* F2 peut répartir un même repère sur plusieurs plans (ex. 700 et 701) : ADDITIONNE les quantités de tous les plans avant de comparer.',
+    "* Quantité F1 : compare la quantité du cartouche ET le total du tableau « Répartition par assemblage ». Signale tout écart.",
+    '* Compare : repère (détecter les renommages, ex. W72 ↔ G10), profil, dimensions (rectangle englobant L x l x ép), quantité, nombre et Ø des trous, angles et coupes, nuance.',
+    '* Jarrets : compare la longueur hors-tout F1 et la longueur CN F2 (« À VÉRIFIER ») ; vérifie que la quantité des ébauches jumelées (ex. J6XJ8) = nombre de paires nécessaires.',
+    '* Repère présent dans un seul fichier : le signaler.',
+    '',
+    "### Tâche 2 – Tableau de vérification et d'affectation (un seul tableau, tous les repères)",
+    '',
+    '### Tâche 3 – Découpage de F1',
+    'Divise le PDF des croquis en un classeur par moyen : 1003 DEB / A164 / TRONÇONNEUSE / CISAILLE + P803 / CISAILLE / GEMINI ép. x (un par épaisseur) / MANUEL / CHUTES. Donne pour chaque classeur la liste des repères et des numéros de pages.',
+    '',
+    '* Un fichier PDF par classeur, nommé « Affaire_MACHINE.pdf » (ex. 26DU_1003_DEB.pdf, 26DU_GEMINI_ép10.pdf, 26DU_CISAILLE_P803.pdf).',
+    "* Chaque page de F1 est copiée telle quelle, sans modification ni recadrage, dans l'ordre des repères de F1.",
+    "* Une page de F1 va dans un seul classeur, celui de la machine affectée au repère (tableau 2).",
+    '* Ne crée pas de classeur vide.',
+    '* Le total des pages des classeurs doit être égal au nombre de pages de F1 : aucune page oubliée, aucune page en double.',
+    '* Livre chaque PDF de classeur séparément, en téléchargement direct dans la discussion. Ne crée AUCUN fichier .zip.',
+    '',
+    '### Tâche 4 – Mise en barre',
+    '',
+    '* Profilés : barres de 12 m et de 15 m ; choisis, barre par barre, la combinaison qui minimise la longueur totale achetée.',
+    '* Tubes : barres de 6 m. Si une pièce dépasse la barre : « DÉPASSEMENT », propose des barres de 12 m ou un aboutage, et calcule les deux.',
+    '* Cornières : barres de 12 m ; réserve la chute mini A164 de 220 mm.',
+    "* Ébauches de jarrets : incluses dans les barres du profil d'origine.",
+    '* Trait de scie : 5 mm entre chaque pièce.',
+    "Pour chaque barre, donne : profil, longueur, repères (qté x L), chute, taux d'utilisation, machine.",
+    '',
+    '### Tâche 5 – Mise en tôle (nesting estimatif)',
+    '',
+    '* Fers plats et tôles : tout en tôles de 3000 x 1500 mm, regroupés par épaisseur.',
+    '* Marge de nesting : 5 mm entre pièces et en bord de tôle.',
+    '* Exclure les pièces « CHUTES ».',
+    '* Vérifier pour chaque nesting GEMINI : ≤ 7 Ø différents, épaisseur ≤ 35 mm (plasma) ou ≤ 80 mm (oxycoupage).',
+    "Pour chaque épaisseur, donne : nombre de tôles, surface des pièces, taux de chute, nombre d'outils. Précise que c'est une estimation à valider dans Steel Project.",
+    '',
+    "### Tâche 6 – Bon d'achat",
+    'Regroupe les besoins des tâches 4 et 5 : désignation, dimensions, longueur ou format, quantité, nuance S275JR, poids unitaire et poids total. Indique les kg/m utilisés et leur source.',
+    '',
+    '## 8. FORMAT DE SORTIE',
+    'Livre un classeur Excel (un onglet par tableau, totaux en formules) et les PDF des classeurs par machine (tâche 3), un fichier PDF par classeur. Ne crée AUCUN fichier .zip.',
+    '',
+    "**Chaque fichier (Excel et chaque PDF) doit être présenté dans la discussion avec un bouton « Télécharger ». Un fichier seulement cité dans le texte n'est PAS livré.**",
+    '',
+    '### Tableau 1 – Différences F1 / F2',
+    '| Plan F2 | Rep | Élément comparé | Valeur F1 | Valeur F2 | Écart (OUI / NON / À VÉRIFIER) | Action |',
+    '|---|---|---|---|---|---|---|',
+    'Si aucun écart pour un repère : une ligne « Conforme ».',
+    '',
+    '### Tableau 2 – Vérification et affectation',
+    "| Rep | Qté | Profil d'origine | Dimensions | Perçages (nb x Ø) | Trusquinage mini | Angles ≠ 90° (O/N) | Profil retenu | FP dispo F3 (O/N) | Machine / moyen | Contrôle capacité (OK / DONNÉE MANQUANTE / DÉPASSEMENT / HORS CAPACITÉ) | Remarque | Page F1 |",
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '',
+    '### Tableau 3 – Classeurs par machine',
+    '| Classeur | Repères | Pages F1 | Nb repères | Nb pièces |',
+    '|---|---|---|---|---|',
+    '',
+    '### Tableau 4 – Mise en barre',
+    '| Profil | Barre (m) | N° barre | Repères (qté x L) | Longueur utilisée | Chute (mm) | Utilisation % | Machine |',
+    '|---|---|---|---|---|---|---|---|',
+    '',
+    '### Tableau 5 – Mise en tôle',
+    '| Épaisseur | Nb tôles 3000x1500 | Repères | Surface pièces (m²) | Chute % | Machine(s) | Outils GEMINI (≤ 7) |',
+    '|---|---|---|---|---|---|---|',
+    '',
+    "### Tableau 6 – Bon d'achat (GROUPE MATEM)",
+    '| N° | Désignation | Dimensions | Longueur / format | Qté | Nuance | Poids unitaire (kg) | Poids total (kg) |',
+    '|---|---|---|---|---|---|---|---|',
+    'Ajoute le total du poids par famille (profilés, tubes, cornières, tôles) et le total général.',
+    '',
 ]
-
-DELAI_REPONSE = 1800 
-DOSSIER_SORTIE = r"C:\Users\E.BENAMOR\Desktop\Comparaison TEKLA et PLM"
-
-
-def normaliser(texte):
-    """Minuscules et sans accents, pour comparer les noms de boutons."""
-    t = unicodedata.normalize("NFKD", texte)
-    return "".join(c for c in t if not unicodedata.combining(c)).lower()
-
-
-def echapper(texte):
-    """Protège les caractères spéciaux de pywinauto."""
-    return "".join("{" + c + "}" if c in "+^%~(){}[]" else c for c in texte)
-
-
-def dossier_telechargements():
-    cle = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
-    guid_telechargements = "{374DE290-123F-4565-9164-39C4925E467B}"
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, cle) as k:
-        chemin, _ = winreg.QueryValueEx(k, guid_telechargements)
-    return Path(os.path.expandvars(chemin))
-
-
-def fenetre_chatgpt():
-    fenetre = Desktop(backend="uia").window(title="ChatGPT", control_type="Window")
-    fenetre.set_focus()
-    time.sleep(1)
-    return fenetre.wrapper_object()
-
-
-def boutons(fenetre):
-    resultat = []
-    for type_ctrl in ("Button", "Hyperlink"):
-        try:
-            resultat.extend(fenetre.descendants(control_type=type_ctrl))
-        except Exception:
-            pass
-    return resultat
-
-
-def trouver_bouton(fenetre, morceau, timeout=10):
-    cible = normaliser(morceau)
-    fin = time.time() + timeout
-    while time.time() < fin:
-        for c in boutons(fenetre):
-            if cible in normaliser(c.window_text()):
-                return c
-        time.sleep(0.5)
-    raise RuntimeError(f"Bouton introuvable : {morceau}")
-
-
-def noms_boutons(fenetre):
-    """Compte les boutons par nom, avant l'envoi du prompt."""
-    return Counter(c.window_text().strip() for c in boutons(fenetre) if c.window_text().strip())
-
-
-def attendre_boite_ouvrir(timeout=15):
-    fin = time.time() + timeout
-    while time.time() < fin:
-        boites = Desktop(backend="win32").windows(class_name="#32770")
-        if boites:
-            return Desktop(backend="win32").window(handle=boites[0].handle)
-        time.sleep(0.5)
-    raise RuntimeError("Boîte « Ouvrir » introuvable.")
-
-
-def champ_nom_fichier(boite):
-    champ = boite.child_window(control_id=1148, class_name="Edit")
-    if champ.exists(timeout=2):
-        return champ
-    combo = boite.child_window(control_id=1148, class_name="ComboBoxEx32")
-    if combo.exists(timeout=2):
-        return combo.child_window(class_name="Edit", found_index=0)
-    return boite.child_window(class_name="Edit", found_index=0)
-def trouver_menu(texte, timeout=5):
-    """Cherche l'élément de menu « Ajouter des fichiers » (en excluant le bouton « ... et plus encore »)."""
-    cible = normaliser(texte)
-    fin = time.time() + timeout
-    while time.time() < fin:
-        candidats = []
-        for fen in Desktop(backend="uia").windows():
-            try:
-                for c in fen.descendants():
-                    nom = c.window_text()
-                    if not nom:
-                        continue
-                    low = normaliser(nom)
-                    if cible in low and "plus encore" not in low:
-                        candidats.append(c)
-            except Exception:
-                continue
-        for c in candidats:
-            if c.element_info.control_type == "MenuItem":
-                return c
-        if candidats:
-            return candidats[0]
-        time.sleep(0.5)
-    raise RuntimeError(f"Menu introuvable : {texte}")
-
-
-def attendre_boite_ouvrir(timeout=15):
-    """Attend la boîte « Ouvrir » réellement visible à l'écran."""
-    fin = time.time() + timeout
-    while time.time() < fin:
-        for b in Desktop(backend="win32").windows(class_name="#32770", visible_only=True):
-            if "ouvrir" in normaliser(b.window_text()):
-                return Desktop(backend="win32").window(handle=b.handle)
-        time.sleep(0.5)
-    visibles = [b.window_text() for b in Desktop(backend="win32").windows(class_name="#32770", visible_only=True)]
-    raise RuntimeError(f"Boîte « Ouvrir » visible introuvable. Boîtes visibles : {visibles}")
-
-def saisir_chemin_ouvrir(chemin, timeout=15):
-    """Tape le chemin dans la boîte « Ouvrir ». Retourne True si la boîte s'est fermée."""
-    boite = attendre_boite_ouvrir(timeout)
-    try:
-        boite.set_focus()
-    except Exception:
-        pass
-    time.sleep(1)
-    send_keys(echapper(chemin), with_spaces=True, pause=0.03)
-    time.sleep(0.5)
-    send_keys("{ENTER}")
-
-    fin = time.time() + 15
-    while time.time() < fin:
-        if not boite.exists():
-            return True
-        time.sleep(0.5)
-    return False
-
-
-def pdf_visible_dans_chatgpt(fenetre, chemin, timeout=20):
-    """Vérifie que le nom du PDF apparaît dans la conversation ChatGPT."""
-    cible = normaliser(Path(chemin).stem)
-    fin = time.time() + timeout
-    while time.time() < fin:
-        for c in fenetre.descendants():
-            try:
-                nom = c.window_text()
-            except Exception:
-                continue
-            if nom and cible in normaliser(nom):
-                return True
-        time.sleep(1)
-    return False
-
-
-def joindre_pdf(fenetre, chemin):
-    if not os.path.exists(chemin):
-        raise FileNotFoundError(f"PDF introuvable : {chemin}")
-    fenetre.set_focus()
-    trouver_bouton(fenetre, "Ajouter des fichiers").click_input()
-    time.sleep(1.5)
-
-    trouver_menu("Ajouter des fichiers").click_input()
-    time.sleep(1.5)
-
-    if not saisir_chemin_ouvrir(chemin):
-        raise RuntimeError(f"La boîte « Ouvrir » ne s'est pas fermée pour : {chemin}")
-
-    fenetre = fenetre_chatgpt()
-    if pdf_visible_dans_chatgpt(fenetre, chemin):
-        print("  -> joint :", Path(chemin).name)
-    else:
-        raise RuntimeError(f"Le fichier n'apparaît pas dans ChatGPT : {Path(chemin).name}")
-
-def nouveau_chat(fenetre):
-    try:
-        trouver_bouton(fenetre, "Nouveau chat", timeout=3).click_input()
-        time.sleep(2)
-    except RuntimeError:
-        print("Bouton « Nouveau chat » non trouvé : on reste dans la conversation actuelle.")
-
-
-def envoyer_prompt(fenetre):
-    champs = fenetre.descendants(control_type="Edit")
-    if not champs:
-        raise RuntimeError("Zone de saisie du message introuvable.")
-    zone = max(champs, key=lambda e: e.rectangle().top)  # la zone de saisie est en bas
-
-    zone.click_input()
-    time.sleep(0.5)
-    for i, ligne in enumerate(PROMPT_LIGNES):
-        if ligne:
-            zone.type_keys(echapper(ligne), with_spaces=True, pause=0.01)
-        if i < len(PROMPT_LIGNES) - 1:
-            send_keys("+{ENTER}")  # saut de ligne sans envoyer
-    time.sleep(0.5)
-    send_keys("{ENTER}")  # envoi du message
-
-
-def attendre_pdf_produit(fenetre, timeout, avant):
-    """Attend un NOUVEAU bouton de téléchargement, apparu après l'envoi du prompt."""
-    fin = time.time() + timeout
-    while time.time() < fin:
-        actuels = boutons(fenetre)
-        compte_actuel = Counter(c.window_text().strip() for c in actuels if c.window_text().strip())
-        for c in sorted(actuels, key=lambda b: b.rectangle().top, reverse=True):
-            nom = c.window_text().strip()
-            low = normaliser(nom)
-            if not nom or "marquer" in low or "non lu" in low:
-                continue
-            if not any(m in low for m in ("telecharg", "download")):
-                continue
-            if compte_actuel[nom] > avant.get(nom, 0):
-                return c
-        time.sleep(3)
-    return None
-
-
-def nom_unique(dossier, nom):
-    cible = dossier / nom
-    compteur = 2
-    while cible.exists():
-        cible = dossier / f"{Path(nom).stem}_{compteur}{Path(nom).suffix}"
-        compteur += 1
-    return cible
-
-
-def enregistrer_pdf_produit(fenetre, avant):
-    os.makedirs(DOSSIER_SORTIE, exist_ok=True)
-    dossier_dl = dossier_telechargements()
-    print("Dossier surveillé :", dossier_dl)
-
-    bouton = attendre_pdf_produit(fenetre, DELAI_REPONSE, avant)
-    if bouton is None:
-        print("Bouton de téléchargement introuvable. Boutons visibles :")
-        for c in boutons(fenetre):
-            if c.window_text():
-                print(" -", repr(c.window_text()))
-        return
-
-    print("Bouton trouvé :", repr(bouton.window_text()))
-    time.sleep(5)
-    debut = time.time()
-    bouton.click_input()
-    time.sleep(2)
-
-    nouveau = None
-    fin = time.time() + 120
-    while time.time() < fin and nouveau is None:
-        time.sleep(1)
-        for f in dossier_dl.glob("*.pdf"):
-            partiel = Path(str(f) + ".crdownload")
-            if f.stat().st_mtime >= debut and not partiel.exists():
-                nouveau = f
-                break
-
-    if nouveau is None:
-        print("Aucun nouveau PDF détecté dans", dossier_dl)
-        return
-
-    destination = nom_unique(Path(DOSSIER_SORTIE), f"Comparaison_{datetime.now():%Y%m%d_%H%M}.pdf")
-    shutil.move(str(nouveau), str(destination))
-    print("PDF déplacé vers :", destination)
-
-
-if __name__ == "__main__":
-    fenetre = fenetre_chatgpt()
-    nouveau_chat(fenetre)
-    for chemin in PDF_FICHIERS:
-        print("Ajout :", chemin)
-        joindre_pdf(fenetre, chemin)
-    fenetre = fenetre_chatgpt()
-    fenetre.set_focus()
-    print("Les deux PDF sont joints. Écriture du prompt...")
-    avant = noms_boutons(fenetre)
-    envoyer_prompt(fenetre)
-    print(f"Message envoyé. Attente de la réponse (jusqu'à {DELAI_REPONSE} s)...")
-    enregistrer_pdf_produit(fenetre, avant)
