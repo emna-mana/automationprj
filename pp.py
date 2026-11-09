@@ -24,8 +24,7 @@ import configuration
 log = logging.getLogger("workflow")
 
 # ===== CONFIGURATION =====
-USERNAME = "eba"
-PASSWORD = "EBA2026"
+USERNAME, PASSWORD = configuration.charger_identifiants()
 CHEMINS = configuration.charger_chemins()
 EXE_PATH = CHEMINS["steel_projects_exe"]
 IMPORT_DIRECTORY = os.path.join(CHEMINS["dossier_sources"], "02IV")
