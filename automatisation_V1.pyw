@@ -29,8 +29,7 @@ from conversion_fer_plat import convertir_fers_plats
 DESKTOP = Desktop(backend="uia")
 
 # ===== CONFIGURATION (valeurs par défaut, modifiables dans l'interface) =====
-USERNAME = "EBA"
-PASSWORD = "EBA2026"
+USERNAME, PASSWORD = configuration.charger_identifiants()  # config.ini [identifiants]
 
 CHEMINS = configuration.charger_chemins()
 EXE_PATH = CHEMINS["steel_projects_exe"]
@@ -234,6 +233,7 @@ def importer_cam3d_projet(window, dossier_projet):
             raise RuntimeError("Le dialogue CAM3D reste ouvert après le clic sur OK et la touche Entrée") from exc
 
     valider_ventilation_plans(window)
+    pp.valider_profils_stricts(window, timeout=60)
     pp.finir_import(window)
 
 

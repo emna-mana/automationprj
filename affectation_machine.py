@@ -21,7 +21,7 @@ import claude
 
 # ===== CONFIGURATION =====
 MOTIF_CLASSEUR = "*.xlsx"           # cherché dans claude.dossier_sortie_affaire(affaire)
-MOTS_ONGLET = ("affect",)     # onglet « T2_Verif_Affectation »
+MOTS_ONGLET = ("affect", "verif")   # onglet « T2_Verif_Affectation »
 ENTETE_REP = ("Rep", "Repère")
 ENTETE_MACHINE = ("Machine / moyen", "Machine")
 

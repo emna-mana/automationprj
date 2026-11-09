@@ -28,7 +28,7 @@ USERNAME = "eba"
 PASSWORD = "EBA2026"
 CHEMINS = configuration.charger_chemins()
 EXE_PATH = CHEMINS["steel_projects_exe"]
-IMPORT_DIRECTORY = os.path.join(CHEMINS["dossier_sources"], "TT")
+IMPORT_DIRECTORY = os.path.join(CHEMINS["dossier_sources"], "02IV")
 AFFAIRE = os.path.basename(os.path.normpath(IMPORT_DIRECTORY))  # transmise à claude pour la comparaison
 DOSSIER_PROJETS_TRAVAILLER = CHEMINS["dossier_projets"]
 PATRON_JARRET = re.compile(r"^\S+_\d+(\.\d+)?$")
@@ -386,7 +386,8 @@ def lignes_profil_strict(fenetre):
 
 def valider_profils_stricts(window, timeout=60):
     # Fenêtre « Profil Strict » : chaque jarret non encore ajouté reçoit un clic sur Ajouter
-    # (bouton en bout de ligne) ; puis Ok. Renvoie False si la fenêtre n'apparaît pas.
+    # (bouton en bout de ligne) ; puis Ok. Les profils enregistrés sont journalisés après Ok.
+    # Renvoie False si la fenêtre n'apparaît pas.
     try:
         dialogue = trouver_fenetre(window, r"Profil Strict", timeout=timeout)
     except DelaiDepasse:
@@ -394,29 +395,33 @@ def valider_profils_stricts(window, timeout=60):
     attendre(dialogue, "exists visible", timeout=30)
     fenetre = dialogue.wrapper_object()
 
-    ajoutes = 0
+    ajoutes = []
     for _ in range(50):  # garde-fou : une ligne qui ne se valide pas ne doit pas boucler indéfiniment
         a_ajouter = None
         for ligne, colonnes, bouton in lignes_profil_strict(fenetre):
             profil = colonnes.get("Profil dans le fichier importé", "")
             importer = colonnes.get("Importer en tant que", "")
             non_traite = importer in ("", "(null)")   # la grille affiche « (null) » pour une cellule vide
-            if PATRON_JARRET.match(profil) and non_traite and bouton is not None:
+            if non_traite and bouton is not None:
                 a_ajouter = (ligne, profil, bouton)
                 break
         if a_ajouter is None:
             break
         ligne, profil, bouton = a_ajouter
-        print(f"Profil strict : {ligne}, jarret {profil}, ajout")
+        print(f"Profil strict : {ligne}, profil {profil}, ajout")
         bouton.click_input()
-        ajoutes += 1
+        ajoutes.append(profil)
         time.sleep(1)
     else:
-        raise RuntimeError("Profil Strict : un jarret reste non ajouté après 50 essais")
+        raise RuntimeError("Profil Strict : un profil reste non ajouté après 50 essais")
 
-    print(f"Profil strict : {ajoutes} jarret(s) ajouté(s)")
     cliquer(dialogue.child_window(title="Ok", control_type="Button"))
     dialogue.wait_not("exists visible", timeout=60, retry_interval=0.5)
+
+    # Enregistrement validé par Ok : on journalise les profils ajoutés
+    for profil in ajoutes:
+        log.info("Profil enregistré : %s", profil)
+    log.info("Profil Strict : %d profil(s) enregistré(s)", len(ajoutes))
     return True
 
 def attendre_une_des_fenetres(window, titres_re, timeout=600):
@@ -478,7 +483,6 @@ def valider_comparaison_affaire(window, timeout=60):
     log.info("Fenêtre « Comparaison [Affaire] » fermée")
     return True
 
-
 def importer_tekla(window, dossier_xml):
     # Importe les fichiers XML Tekla du dossier donné ; journalise chaque étape
     chemin_xml = os.path.join(dossier_xml, "*.XML")
@@ -507,19 +511,22 @@ def importer_tekla(window, dossier_xml):
     cliquer_avec_comparaison(window, ok_validation, timeout=600)
     log.info("Ok de « Ventilation des plans » cliqué")
 
-    # Ensuite : comparaison de profils (titre « Import ») ou « Profil Strict »
+    # Ensuite : comparaison de profils, « Profil Strict » ou « Comparaison [Affaire] » (écran réel)
     suivante = attendre_une_des_fenetres(
-        window, (r"Profil Strict", r"^Import$"), timeout=600
+        window, (r"Profil Strict", r"^Import$", r"Comparaison \[.*\]"), timeout=600
     )
     log.info("Fenêtre suivante détectée : %s", suivante)
 
-    if suivante == r"^Import$":
-        comparaison_profils = window.child_window(auto_id="FormProfileComparison", control_type="Window")
-        attendre(comparaison_profils, "exists visible", timeout=30)
+    # Comparaison de profils : validée seulement si elle est réellement présente.
+    # Elle peut ne pas s'ouvrir (la détection « Import » peut viser une autre fenêtre) : pas d'erreur.
+    comparaison_profils = window.child_window(auto_id="FormProfileComparison", control_type="Window")
+    if comparaison_profils.exists(timeout=5) and comparaison_profils.is_visible():
         cliquer_sans_souris(comparaison_profils.child_window(title="Ok", control_type="Button"))
         log.info("Ok de la comparaison de profils cliqué")
         comparaison_profils.wait_not("exists visible", timeout=60, retry_interval=0.5)
         log.info("Comparaison de profils fermée")
+    else:
+        log.info("Pas de comparaison de profils à valider")
 
     # « Profil Strict » : absente, la fonction renvoie False sans erreur
     if valider_profils_stricts(window, timeout=20):
@@ -560,8 +567,16 @@ def quitter_gestion_production(window, timeout=60):
     attendre_appli(window)
     window.set_focus()
     send_keys("^q")
+
+    def fermee():
+        # Fenêtre disparue (fermée d'elle-même) : c'est bien fermé, pas une erreur
+        try:
+            return "Gestion de production" not in window.window_text()
+        except COMError:
+            return True
+
     try:
-        wait_until(timeout, 0.5, lambda: "Gestion de production" not in window.window_text())
+        wait_until(timeout, 0.5, fermee)
     except DelaiDepasse:
         raise RuntimeError("L'écran Gestion de production ne s'est pas fermé avec Ctrl+Q")
     attendre_appli(window)
@@ -868,8 +883,16 @@ def quitter_gestion_affaires(window, timeout=60):
     attendre_appli(window)
     window.set_focus()
     send_keys("^q")
+
+    def fermee():
+        # Fenêtre disparue (fermée d'elle-même) : c'est bien fermé, pas une erreur
+        try:
+            return TITRE_GESTION_AFFAIRES not in window.window_text()
+        except COMError:
+            return True
+
     try:
-        wait_until(timeout, 0.5, lambda: TITRE_GESTION_AFFAIRES not in window.window_text())
+        wait_until(timeout, 0.5, fermee)
     except DelaiDepasse:
         raise RuntimeError("L'écran Gestion d'Affaires ne s'est pas fermé avec Ctrl+Q")
     attendre_appli(window)
@@ -926,4 +949,3 @@ def main_complet():
 
 if __name__ == "__main__":
     main_complet()
-    

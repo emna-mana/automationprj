@@ -28,3 +28,20 @@ def charger_chemins():
         valeur = section.get(nom, valeur_defaut).strip() or valeur_defaut
         chemins[nom] = os.path.normpath(os.path.expandvars(os.path.expanduser(valeur)))
     return chemins
+
+
+def charger_identifiants():
+    # Lit la section [identifiants] de config.ini ; ne contient aucun mot de passe en dur
+    configuration = configparser.ConfigParser(interpolation=None)
+    if not FICHIER_CONFIGURATION.is_file():
+        raise FileNotFoundError(f"Fichier config.ini introuvable dans {_DOSSIER_PROJET}")
+    configuration.read(FICHIER_CONFIGURATION, encoding="utf-8")
+
+    if not configuration.has_section("identifiants"):
+        raise ValueError("config.ini : section [identifiants] manquante")
+
+    utilisateur = configuration.get("identifiants", "utilisateur", fallback="").strip()
+    mot_de_passe = configuration.get("identifiants", "mot_de_passe", fallback="")
+    if not utilisateur or not mot_de_passe:
+        raise ValueError("config.ini : « utilisateur » ou « mot_de_passe » vide dans [identifiants]")
+    return utilisateur, mot_de_passe

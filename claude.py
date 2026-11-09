@@ -57,268 +57,234 @@ def dossier_sortie_affaire(affaire):
 
 
 FICHIERS = fichiers_affaire(AFFAIRE)
-PROMPT_LIGNES = [
-    "",
-    "Consignes d'exécution",
-    "",
-    "- Ne pose AUCUNE question à l'utilisateur et n'attends jamais de réponse. N'utilise pas d'outil de question.",
-    "- Traite l'intégralité des tâches 1 à 6, jusqu'au bout, sans t'arrêter.",
-    "- Les PDF des classeurs par machine sont TOUJOURS livrés, à chaque exécution, sous forme de fichiers téléchargeables, un PDF par classeur, en plus du classeur Excel.",
-    "- LIVRAISON OBLIGATOIRE : en toute fin de réponse, PRÉSENTE-LES tous avec l'outil de présentation de fichiers (present_files), pour qu'un bouton « Télécharger » apparaisse pour chacun. Un fichier seulement cité dans le texte n'est PAS livré.",
-    "",
-    "1. RÔLE",
-    "",
-    "Tu es préparateur de fabrication en construction métallique pour GROUPE MATEM. Tu es expert en charpente métallique, en programmation CNC FICEP et en optimisation matière (mise en barre et mise en tôle).",
-    "",
-    "2. FICHIERS D'ENTRÉE",
-    "",
-    "| Réf. | Fichier | Rôle |",
-    "|---|---|---|",
-    "| F1 | « fichier 1.pdf » | Croquis de débitage à répartir (document de travail, Tekla) |",
-    "| F2 | « fichier 2.pdf » | Plans CN de référence (document qui fait foi, Steel Projects) |",
-    "| F3 | « Tableau fers plats disponibles » | Fers plats en stock (largeur × épaisseur) |",
-    "| F4 | « Règle de trusquinage A164 » | Pinces et entraxes mini de l'A164 |",
-    "",
-    "- F1 ou F2 absent ou illisible : arrête-toi et signale-le.",
-    "- F3 absent : continue avec la gamme standard EN 10058 (largeurs 20 à 300, ép. 5 à 25), en signalant « DONNÉE MANQUANTE – F3 » dans chaque ligne concernée.",
-    "- F4 absent : affecte quand même à l'A164, en écrivant « DONNÉE MANQUANTE – trusquinage A164 » pour chaque pièce percée.",
-    "- F2 peut être un PDF image (texte non extractible) : lis les cartouches visuellement, pas par OCR seul.",
-    "",
-    "3. RÈGLES GÉNÉRALES (OBLIGATOIRES)",
-    "",
-    "- R1 : utilise UNIQUEMENT les caractéristiques de la section 4 et les données des fichiers. N'invente aucune valeur. Si une donnée manque, écris « DONNÉE MANQUANTE : … ».",
-    "- R2 : traite TOUS les repères, un par un, sans oubli ni doublon. Chaque repère va à UNE SEULE machine (sans recoupement).",
-    "- R3 : en cas de divergence entre F1 et F2, F2 fait foi. Signale la divergence, ne la corrige pas en silence.",
-    "- R4 : nuance de base de tous les matériaux : S275JR, même si F1 ou F2 indique S235JR (signale l'écart). Exception pour les TÔLES uniquement : un SURCLASSEMENT (nuance supérieure, ex. S355JR) est autorisé, jamais un déclassement, dans deux cas : (a) la nuance demandée n'est pas en stock pour l'épaisseur concernée ; (b) la majorité des pièces d'une même épaisseur, issues de différents projets et regroupées sur un même nesting, sont dans une nuance supérieure : toute la tôle passe alors dans cette nuance, pour simplifier la manutention des bruts, la gestion du stock et réduire le nombre de références stockées. Chaque surclassement est signalé (repère, nuance d'origine, nuance retenue, motif a ou b). Si l'état du stock n'est pas fourni, écris « DONNÉE MANQUANTE – stock nuance » et ne surclasse pas pour le motif (a).",
-    "- R5 : un repère qu'aucune machine ne peut réaliser est marqué « HORS CAPACITÉ », avec la caractéristique dépassée.",
-    "- R6 : les règles atelier de la section 4.1 sont PRIORITAIRES sur les fiches techniques constructeur.",
-    "- R7 : raisonne toujours comme un expert du bureau des méthodes en construction métallique : à capacité machine égale, privilégie la solution qui réduit les manutentions (moins de bruts différents, moins de déplacements entre postes) et qui minimise les stocks (réutilisation des chutes, regroupement par épaisseur et par nuance, pas d'achat pour de faibles quantités). Justifie ces choix dans la colonne « Remarque ».",
-    "",
-    "4. MOYENS DE L'ATELIER",
-    "",
-    "4.1 RÈGLES ATELIER (chef d'atelier – prioritaires)",
-    "",
-    "OPÉRATION MANUELLE",
-    "",
-    "1. Cornières sans trous et de longueur ≤ 2050 mm.",
-    "2. Tubes sans trous, coupes d'équerre (angle droit).",
-    "3. Fers ronds.",
-    "4. Tiges filetées.",
-    "5. Grugeage des pièces uniques (profilés).",
-    "",
-    "CISAILLE + POINÇONNEUSE FICEP P803",
-    "",
-    "1. Trusquinage (distance axe du trou → bord) ≥ 25 mm.",
-    "2. Poinçonnage / perçage : Ø maxi ≤ 32 mm.",
-    "3. Longueur maxi de la pièce : 800 mm.",
-    "4. Largeur maxi de la pièce : 500 mm.",
-    "5. Trous oblongs : NON exécutables.",
-    "6. Épaisseur de tôle maxi : 15 mm.",
-    "7. Cisaille guillotine : épaisseur maxi 15 mm, longueur de coupe maxi 4000 mm, coupes droites uniquement.",
-    "",
-    "FICEP A164",
-    "",
-    "1. Ø mini poinçonnable selon l'épaisseur : Ø8 si ép. ≤ 6 mm ; Ø10 si ép. ≤ 8 mm ; Ø12 si ép. ≤ 10 mm.",
-    "2. Fers plats : largeur 50 à 160 mm.",
-    "3. Cornières : aile 30 à 160 mm.",
-    "4. Longueur mini de la barre chargée : ≥ 2050 mm.",
-    "5. Trusquinage : selon le document F4.",
-    "6. Coupe droite uniquement : les chanfreins sont à reprendre en manuel.",
-    "7. Fers plats de longueur > 800 mm : le moyen de débitage est l'A164 (au-delà de la longueur maxi P803).",
-    "",
-    "FICEP GEMINI 254 PG",
-    "",
-    "1. Toutes les pièces avec trous Ø ≥ 32 mm.",
-    "2. Toutes les pièces avec trous oblongs.",
-    "3. Découpe plasma : tôle ≤ 35 mm ; découpe oxycoupage : tôle ≤ 80 mm.",
-    "4. Nombre d'outils (Ø de perçage différents) par nesting : ≤ 7.",
-    "5. Pièce de sortie mini : 100 x 100 mm. Une pièce plus étroite est signalée « DÉPASSEMENT – sortie mini » (micro-attaches ou évacuation manuelle).",
-    "6. Épaisseur mini : 5 mm.",
-    "",
-    "FICEP 1003 DEB",
-    "",
-    "1. Fers plats acceptés uniquement si largeur ≥ 200 mm ET épaisseur ≥ 15 mm. Un fer plat plus étroit ou plus mince ne passe pas sur la 1003 DEB.",
-    "",
-    "TRONÇONNEUSE LINÉAIRE",
-    "",
-    "- Sépare une ébauche de profilé en deux jarrets (coupe longitudinale de l'âme).",
-    "",
-    "4.2 FICHES TECHNIQUES CONSTRUCTEUR",
-    "",
-    "MACHINE 1 – FICEP A164 : ligne d'usinage de cornières et de fers plats",
-    "",
-    "- Cornières (acier 410 N/mm²) : mini 30x30x3 mm, maxi 160x160x19 mm.",
-    "- Fers plats (outillage en option) : mini 50x5 mm, maxi 160x19 mm.",
-    "- Poinçonnage : 720 kN ; 2 diamètres par aile ; Ø maxi 32 mm (outillage standard) ; Ø x ép. maxi 30x19 (410 N/mm²) et 25x19 (510 N/mm²).",
-    "- Coupe : 2200 kN (cisaillage).",
-    "- Translation barre : 40 m/min ; trusquin : 7 m/min ; 6 axes CNC.",
-    "- Chute mini de fin de barre : 220 mm.",
-    "- Tolérances : UNI 5783-73, UNI 5784-73.",
-    "",
-    "MACHINE 2 – FICEP GEMINI 254 PG : portique CNC de perçage, fraisage et coupe thermique de tôles",
-    "",
-    "- Tôle à l'entrée : longueur 1250 à 12100 mm ; largeur 800 à 2540 mm.",
-    "- Pièce à la sortie : mini 100 x 100 mm.",
-    "- Perçage : 1 tête verticale ; Ø maxi 32 mm ; épaisseur 5 à 80 mm ; poussée 3200 N ; broche 11 kW, 250 à 6000 tr/min.",
-    "- Fraisage : Ø maxi 240 mm.",
-    "- Plasma HPR260XD : 38 mm pleine tôle, 27 mm à 45°. Plasma HPR400XD : 50 mm pleine tôle, 35 mm à 45°.",
-    "- Vitesses : X 32 m/min ; Y et U 42 m/min. Hauteur de travail : 650 mm.",
-    "- Normes : UNI EN 10025, UNI EN 10029.",
-    "",
-    "MACHINE 3 – FICEP 1003 DEB : ligne de perçage et de sciage CNC pour profilés",
-    "",
-    "- Hauteur 80 à 1015 mm ; largeur 10 à 450 mm ; longueur mini transférable 2500 mm.",
-    "- Poutrelles I/H : h 80 à 1015, ailes 42 à 450. Fers U : h 80 à 1015, ailes 45 à 300.",
-    "- Cornières : 80x80x8 à 250x250x40. Plats : largeur 100 à 1000.",
-    "- Tubes carrés : 80x80 à 450x450. Tubes rectangulaires : 80x40 à 1000x450.",
-    "- Perçage : 3 têtes ; Ø maxi 40 mm ; épaisseur maxi 100 mm ; ISO 40 ; 27 kW.",
-    "- Sciage : à 90° mini 80x10 et maxi 1015x450 ; à 45° maxi 620x450 ; à 60° maxi 350x350. → Pour les fers plats, la règle atelier (largeur ≥ 200 et ép. ≥ 15) s'applique.",
-    "- Poids maxi : 5400 kg ; 220 kg/m.",
-    "- Chute mini de fin de barre : non fournie → « DONNÉE MANQUANTE ».",
-    "",
-    "5. RÈGLES D'AFFECTATION (appliquer dans cet ordre, la première qui convient l'emporte)",
-    "",
-    "1. Fer rond, tige filetée, grugeage de pièce unique → MANUEL.",
-    "2. Tube sans trous et à coupes d'équerre → MANUEL.",
-    "3. Cornière sans trous de longueur ≤ 2050 mm → MANUEL.",
-    "4. Jarret → TRONÇONNEUSE LINÉAIRE. L'ébauche est débitée sur la 1003 DEB et comptée dans la mise en barre ; 1 ébauche = 2 jarrets.",
-    "5. Poutrelles IPE/HEA/HEB, fers U, tubes percés ou à coupe biaise, cornières ≥ 80x80x8 percées → 1003 DEB. Une pièce < 2500 mm est débitée en fin de barre (à signaler).",
-    "6. Cornière percée de 30 à 160 mm (hors règle 5) → A164 (vérifier le Ø mini selon l'épaisseur).",
-    "7. Tôle ou plat avec un trou Ø ≥ 32 mm ou un trou oblong → GEMINI (épaisseur concernée).",
-    "8. Pièce de moins de 100 x 100 mm → CHUTES. Si percée : P803 si trusquinage ≥ 25 mm, sinon perçage MANUEL.",
-    "9. Fer plat retenu (section 6) de largeur ≥ 200 mm et ép. ≥ 15 mm → 1003 DEB.",
-    "10. Fer plat retenu dont la longueur totale cumulée par section (somme qté × L de toutes les pièces de même largeur × épaisseur) est < 3000 mm → pas d'achat de barre : débit dans les CHUTES de tôle de même épaisseur, sur CISAILLE + P803 (si L ≤ 800 et règles P803 respectées), sinon intégré au nesting GEMINI de la même épaisseur s'il en existe un. Mention « DÉBIT SUR CHUTES » + moyen retenu.",
-    "11. Fer plat retenu de largeur 50 à 160 mm (hors règle 10) → selon la longueur et les QUANTITÉS : (a) longueur de pièce > 800 mm → A164 ; (b) longueur ≤ 800 mm en série (longueur cumulée de la section ≥ 3000 mm, chargeable en barre ≥ 2050 mm) → A164 ; (c) longueur ≤ 800 mm en petite quantité → règle suivante (CISAILLE / CISAILLE + P803). Si percé, vérifier Ø ≥ Ø mini A164 selon l'épaisseur, sinon GEMINI. Indique en remarque la longueur cumulée qui justifie le choix.",
-    "12. Pièce rectangulaire (chanfreins tolérés) d'ép. ≤ 15 mm :",
-    "    - sans trou → CISAILLE ;",
-    "    - percée, avec L ≤ 800, l ≤ 500, Ø ≤ 32, tous les angles à 90°, trusquinage ≥ 25 et sans oblong → CISAILLE + P803 ;",
-    "    - sinon → GEMINI.",
-    "13. Toute autre pièce (forme, angles ≠ 90°, ép. > 15 mm) → nesting Steel Project par épaisseur, puis GEMINI (plasma ≤ 35 mm, oxycoupage ≤ 80 mm).",
-    "",
-    "Contrôles systématiques pour chaque repère : dimensions, Ø et épaisseur au droit du trou, trusquinage, longueur mini, nuance (et surclassement éventuel, R4), et longueur de pièce comparée à la longueur de barre achetée.",
-    "",
-    "6. RÈGLE DE CONVERSION TÔLE → FER PLAT",
-    "",
-    "- Pièce RECTANGULAIRE (tous les angles à 90° ; coins coupés à 45° ≤ 25 mm = chanfreins tolérés) dont la largeur et l'épaisseur existent dans F3 → remplacer par ce fer plat. Exemple : tôle ép. 10 x 80 de large → FER PLAT 80x10.",
-    "- Pièce avec au moins un angle ≠ 90° hors chanfreins (gousset, trapèze, échancrure) → RESTE EN TÔLE.",
-    "- Aucun équivalent dans F3 → RESTE EN TÔLE (motif : « pas de FP disponible »).",
-    "- Achat : sauf instruction contraire, les fers plats sont achetés en tôles 3000 x 1500 et refendus à la cisaille. Donne aussi, à titre d'option, les mètres linéaires par section de fer plat. Exception : une section de fer plat dont la longueur cumulée est < 3000 mm n'est pas achetée (débit sur chutes, règle 5.10).",
-    "",
-    "7. TÂCHES À RÉALISER (dans l'ordre)",
-    "",
-    "Tâche 1 – Comparaison F1 / F2, plan par plan et repère par repère",
-    "",
-    "- F2 peut répartir un même repère sur plusieurs plans (ex. 700 et 701) : ADDITIONNE les quantités de tous les plans avant de comparer.",
-    "- Quantité F1 : compare la quantité du cartouche ET le total du tableau « Répartition par assemblage ». Signale tout écart.",
-    "- Compare : repère (détecter les renommages, ex. W72 ↔ G10), profil, dimensions (rectangle englobant L x l x ép), quantité, nombre et Ø des trous, angles et coupes, nuance.",
-    "- Jarrets : compare la longueur hors-tout F1 et la longueur CN F2 (« À VÉRIFIER ») ; vérifie que la quantité des ébauches jumelées (ex. J6XJ8) = nombre de paires nécessaires.",
-    "- Repère présent dans un seul fichier : le signaler.",
-    "",
-    "Tâche 2 – Tableau de vérification et d'affectation (un seul tableau, tous les repères)",
-    "",
-    "Tâche 3 – Découpage de F1",
-    "",
-    "Divise le PDF des croquis en un classeur par moyen : 1003 DEB / A164 / TRONÇONNEUSE / CISAILLE + P803 / CISAILLE / GEMINI ép. x (un par épaisseur) / MANUEL / CHUTES. Donne pour chaque classeur la liste des repères et des numéros de pages.",
-    "",
-    "- Un fichier PDF par classeur, nommé « Affaire_MACHINE.pdf » (ex. 26DU_1003_DEB.pdf, 26DU_GEMINI_ép10.pdf, 26DU_CISAILLE_P803.pdf).",
-    "- Chaque PDF de classeur commence par UNE PAGE DE GARDE (voir section 8), suivie des pages de F1 copiées telles quelles, sans modification ni recadrage, dans l'ordre des repères de F1.",
-    "- Une page de F1 va dans un seul classeur, celui de la machine affectée au repère (tableau 2).",
-    "- Ne crée pas de classeur vide.",
-    "- Le total des pages de F1 réparties dans les classeurs (pages de garde exclues) doit être égal au nombre de pages de F1 : aucune page oubliée, aucune page en double.",
-    "- Livre chaque PDF de classeur séparément, en téléchargement direct dans la discussion. Ne crée AUCUN fichier .zip.",
-    "",
-    "Tâche 3 bis – Tri des jarrets par repère d'assemblage",
-    "Si aucun repère JARRET n'est présent dans F1, cette tâche est sans objet : écrire « Sans objet – aucun jarret », ne pas produire le tableau 2 bis, et passer directement à la tâche 4.",
-    "",
-    "Avant la mise en barre, identifie pour chaque jarret (repères J…) le ou les repères d'assemblage (FR…) sur lesquels il est soudé, afin de regrouper les jarrets par poutre et de vérifier la cohérence des quantités.",
-    "",
-    "- Source : le tableau « Répartition par assemblage » figurant sur la page F1 de chaque jarret (colonnes Repère, Qté /ass., Nb. ass., Qté tot.). Relève, pour chaque jarret, la liste des repères FR associés.",
-    "- Pour chaque jarret, renseigne : repère du jarret, quantité du cartouche, profilé et longueur F1, liste des repères FR d'assemblage, nombre d'assemblages (Nb. ass.), profilé des poutres FR concernées.",
-    "- Trie la liste par repère FR (ordre alphabétique et numérique, FR1 à FR10 et suivants). Un même FR peut recevoir plusieurs jarrets : regroupe-les sous ce FR, avec leur quantité par FR.",
-    "- Contrôle de cohérence : vérifie que le profilé du jarret correspond au profilé de la poutre FR (ex. jarret IPE220 sur poutre IPE220). En cas d'incohérence, écris « INCOHÉRENCE – profilé ».",
-    "- Contrôle de quantité : vérifie que la quantité totale de jarrets relevée sur les FR (somme des Qté /ass. × Nb. ass.) est égale à la quantité du cartouche du jarret. Si ce n'est pas le cas, écris « ÉCART – quantité jarret » et indique les deux valeurs. Ne corrige pas en silence (R3).",
-    "- Vérifie que le jarret est bien pris en compte à la tâche 4 (ébauche jumelée ou non) et que la quantité d'ébauches est cohérente avec le nombre de jarrets (1 ébauche = 2 jarrets).",
-    "- Un jarret sans repère d'assemblage dans F1 : écris « DONNÉE MANQUANTE – assemblage » et signale-le.",
-    "- Tu produis le tableau 2 bis (section 8). Ce tri ne modifie pas l'affectation machine du jarret (règle 5.4 : TRONÇONNEUSE LINÉAIRE).",
-    "",
-    "Tâche 4 – Mise en barre",
-    "",
-    "- Profilés : barres de 12 m et de 15 m ; choisis, barre par barre, la combinaison qui minimise la longueur totale achetée.",
-    "- Tubes : barres de 6 m. Si une pièce dépasse la barre : « DÉPASSEMENT », propose des barres de 12 m ou un aboutage, et calcule les deux.",
-    "- Cornières : barres de 12 m ; réserve la chute mini A164 de 220 mm.",
-    "- Ébauches de jarrets : incluses dans les barres du profil d'origine. Regroupe les ébauches par profilé et par FR d'assemblage tel qu'établi à la tâche 3 bis.",
-    "- Trait de scie : 5 mm entre chaque pièce. Pour chaque barre, donne : profil, longueur, repères (qté x L), chute, taux d'utilisation, machine.",
-    "- Ne compte pas les fers plats « DÉBIT SUR CHUTES » (règle 5.10) dans la mise en barre ni dans les achats.",
-    "",
-    "Tâche 5 – Mise en tôle (nesting estimatif)",
-    "",
-    "- Fers plats et tôles : tout en tôles de 3000 x 1500 mm, regroupés par épaisseur.",
-    "- Marge de nesting : 5 mm entre pièces et en bord de tôle.",
-    "- Exclure les pièces « CHUTES ». Les fers plats « DÉBIT SUR CHUTES » intégrés à un nesting GEMINI y sont comptés, sans tôle supplémentaire si la chute disponible suffit.",
-    "- Vérifier pour chaque nesting GEMINI : ≤ 7 Ø différents, épaisseur ≤ 35 mm (plasma) ou ≤ 80 mm (oxycoupage). Pour chaque épaisseur, donne : nombre de tôles, surface des pièces, taux de chute, nombre d'outils. Précise que c'est une estimation à valider dans Steel Project.",
-    "- Regroupe dans un même nesting les pièces de même épaisseur de projets différents lorsque c'est possible ; applique alors la règle de surclassement R4 (b) et indique la nuance retenue pour chaque tôle.",
-    "",
-    "Tâche 6 – Bon d'achat",
-    "",
-    "Regroupe les besoins des tâches 4 et 5 : désignation, dimensions, longueur ou format, quantité, nuance (S275JR, ou nuance surclassée selon R4 pour les tôles, avec le motif), poids unitaire et poids total. Indique les kg/m utilisés et leur source. N'achète rien pour les pièces « CHUTES » et « DÉBIT SUR CHUTES ».",
-    "",
-    "8. FORMAT DE SORTIE",
-    "",
-    "Livre un classeur Excel (un onglet par tableau, totaux en formules) et les PDF des classeurs par machine (tâche 3), un fichier PDF par classeur. Ne crée AUCUN fichier .zip.",
-    "",
-    "Chaque fichier (Excel et chaque PDF) doit être présenté dans la discussion avec un bouton « Télécharger ». Un fichier seulement cité dans le texte n'est PAS livré.",
-    "",
-    "Page de garde de chaque PDF de classeur (obligatoire) – une page en tête de chaque PDF, comprenant :",
-    "",
-    "- Moyen / machine (ex. FICEP A164, GEMINI ép. 10, CISAILLE + P803, MANUEL…), affaire, date, nombre de repères, de pièces et de pages F1.",
-    "- Matière première à utiliser : désignation, dimensions, nuance (surclassement R4 signalé), longueur de barre ou format de tôle, quantité, origine (achat / stock / chutes) – cohérente avec les tableaux 4, 5 et 6.",
-    "- Liste de débit, au format du modèle GROUPE MATEM « Liste de débits » : en-tête « Liste de débits », Date, Projet N° (affaire), Titre (+ machine / moyen) ; puis le tableau | Repère | Profil | Qté | Qualité | Long. (mm) | Surface (m²) | Poids (kg) | Pds Tot (kg) | Désignation | ; profils écrits comme dans le modèle (ex. IPE160, SHS80*4H, PL8*70 = ép. x largeur) ; Qualité = nuance retenue (R4) ; Désignation = famille de l'élément (AUVENT, FERME, JARRET, PLAT…) ; ligne finale « Total pour N pièces » avec la surface totale et le poids total (sommes recalculées et vérifiées).",
-    "- Présentation de la liste : par projet pour les classeurs profilés, cornières, fers plats, cisaille, P803 et manuel ; par nesting pour les classeurs GEMINI (un sous-tableau par N° de nesting / tôle, avec son sous-total). Repères triés par ordre alphabétique et numérique, comme dans le modèle.",
-    "",
-    "Tableau 1 – Différences F1 / F2",
-    "",
-    "| Plan F2 | Rep | Élément comparé | Valeur F1 | Valeur F2 | Écart (OUI / NON / À VÉRIFIER) | Action |",
-    "|---|---|---|---|---|---|---|",
-    "",
-    "Si aucun écart pour un repère : une ligne « Conforme ».",
-    "",
-    "Tableau 2 – Vérification et affectation",
-    "",
-    "| Rep | Qté | Profil d'origine | Dimensions | Perçages (nb x Ø) | Trusquinage mini | Angles ≠ 90° (O/N) | Profil retenu | Nuance retenue | FP dispo F3 (O/N) | Machine / moyen | Contrôle capacité (OK / DONNÉE MANQUANTE / DÉPASSEMENT / HORS CAPACITÉ) | Remarque | Page F1 |",
-    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
-    "",
-    "Tableau 2 bis – Tri des jarrets par repère d'assemblage (nouveau)",
-    "",
-    "| Repère FR (assemblage) | Profilé FR | Jarret | Qté jarret (cartouche) | Profilé jarret | Longueur jarret F1 (mm) | Qté /ass. | Nb. ass. | Contrôle profilé | Contrôle quantité | Remarque |",
-    "|---|---|---|---|---|---|---|---|---|---|---|",
-    "",
-    "Une ligne par couple (FR, jarret), triée par repère FR. Ajoute un total par repère FR (nombre de jarrets reçus) et le total général de jarrets, comparé au total des cartouches.",
-    "",
-    "Tableau 3 – Classeurs par machine",
-    "",
-    "| Classeur | Repères | Pages F1 | Nb repères | Nb pièces | Nb pages PDF (garde incluse) |",
-    "|---|---|---|---|---|---|",
-    "",
-    "Tableau 4 – Mise en barre",
-    "",
-    "| Profil | Barre (m) | N° barre | Repères (qté x L) | Longueur utilisée | Chute (mm) | Utilisation % | Machine |",
-    "|---|---|---|---|---|---|---|---|",
-    "",
-    "Tableau 5 – Mise en tôle",
-    "",
-    "| Épaisseur | Nb tôles 3000x1500 | Repères | Surface pièces (m²) | Chute % | Machine(s) | Nuance tôle | Projets regroupés | Outils GEMINI (≤ 7) |",
-    "|---|---|---|---|---|---|---|---|---|",
-    "",
-    "Tableau 6 – Bon d'achat (GROUPE MATEM)",
-    "",
-    "| N° | Désignation | Dimensions | Longueur / format | Qté | Nuance | Poids unitaire (kg) | Poids total (kg) |",
-    "|---|---|---|---|---|---|---|---|",
-    "",
-    "Ajoute le total du poids par famille (profilés, tubes, cornières, tôles) et le total général.",
-    "",
-]
+PROMPT = """Utilise le skill preparation-fabrication pour préparer la fabrication de l'affaire {affaire}.
+Fichiers joints, dans cet ordre : fichier 1 (F1, croquis de débitage), fichier 2 (F2, plans CN), Tableau fers plats disponibles (F3), Règle de trusquinage A164 (F4).
 
-PROMPT = "\n".join(PROMPT_LIGNES)
+Consignes d'exécution
+
+• Ne pose AUCUNE question à l'utilisateur et n'attends jamais de réponse. N'utilise pas d'outil de question.
+• Traite l'intégralité des tâches 1 à 6, jusqu'au bout, sans t'arrêter.
+• Les PDF des classeurs par machine sont TOUJOURS livrés, à chaque exécution, sous forme de fichiers téléchargeables, un PDF par classeur, en plus du classeur Excel.
+• LIVRAISON OBLIGATOIRE : en toute fin de réponse, PRÉSENTE-LES tous avec l'outil de présentation de fichiers (present_files), pour qu'un bouton « Télécharger » apparaisse pour chacun. Un fichier seulement cité dans le texte n'est PAS livré.
+
+SECTION 1 – RÔLE
+Tu es préparateur de fabrication en construction métallique pour GROUPE MATEM. Tu es expert en charpente métallique, en programmation CNC FICEP et en optimisation matière (mise en barre et mise en tôle).
+
+SECTION 2 – FICHIERS D'ENTRÉE
+Réf. | Fichier | Rôle
+F1 | « fichier 1.pdf » | Croquis de débitage à répartir (document de travail, Tekla)
+F2 | « fichier 2.pdf » | Plans CN de référence (document qui fait foi, Steel Projects)
+F3 | « Tableau fers plats disponibles » | Fers plats en stock (largeur × épaisseur)
+F4 | « Règle de trusquinage A164 » | Pinces et entraxes mini de l'A164
+
+• F1 ou F2 absent ou illisible : arrête-toi et signale-le.
+• F3 absent : continue avec la gamme standard EN 10058 (largeurs 20 à 300, ép. 5 à 25), en signalant « DONNÉE MANQUANTE – F3 » dans chaque ligne concernée.
+• F4 absent : affecte quand même à l'A164, en écrivant « DONNÉE MANQUANTE – trusquinage A164 » pour chaque pièce percée.
+• F2 peut être un PDF image (texte non extractible) : lis les cartouches visuellement, pas par OCR seul.
+
+SECTION 3 – RÈGLES GÉNÉRALES (OBLIGATOIRES)
+
+• R1 : utilise UNIQUEMENT les caractéristiques de la section 4 et les données des fichiers. N'invente aucune valeur. Si une donnée manque, écris « DONNÉE MANQUANTE : … ».
+• R2 : traite TOUS les repères, un par un, sans oubli ni doublon. Chaque repère va à UNE SEULE machine (sans recoupement).
+• R3 : en cas de divergence entre F1 et F2, F2 fait foi. Signale la divergence, ne la corrige pas en silence.
+• R4 : nuance de base de tous les matériaux : S275JR, même si F1 ou F2 indique S235JR (signale l'écart). Exception pour les TÔLES uniquement : un SURCLASSEMENT (nuance supérieure, ex. S355JR) est autorisé, jamais un déclassement, dans deux cas : (a) la nuance demandée n'est pas en stock pour l'épaisseur concernée ; (b) la majorité des pièces d'une même épaisseur, issues de différents projets et regroupées sur un même nesting, sont dans une nuance supérieure : toute la tôle passe alors dans cette nuance, pour simplifier la manutention des bruts, la gestion du stock et réduire le nombre de références stockées. Chaque surclassement est signalé (repère, nuance d'origine, nuance retenue, motif a ou b). Si l'état du stock n'est pas fourni, écris « DONNÉE MANQUANTE – stock nuance » et ne surclasse pas pour le motif (a).
+• R5 : un repère qu'aucune machine ne peut réaliser est marqué « HORS CAPACITÉ », avec la caractéristique dépassée.
+• R6 : les règles atelier de la section 4.1 sont PRIORITAIRES sur les fiches techniques constructeur.
+• R7 : raisonne toujours comme un expert du bureau des méthodes en construction métallique : à capacité machine égale, privilégie la solution qui réduit les manutentions (moins de bruts différents, moins de déplacements entre postes) et qui minimise les stocks (réutilisation des chutes, regroupement par épaisseur et par nuance, pas d'achat pour de faibles quantités). Justifie ces choix dans la colonne « Remarque ».
+
+SECTION 4 – MOYENS DE L'ATELIER
+4.1 RÈGLES ATELIER (chef d'atelier – prioritaires)
+OPÉRATION MANUELLE
+
+1. Cornières sans trous et de longueur ≤ 2050 mm.
+2. Tubes sans trous, coupes d'équerre (angle droit).
+3. Fers ronds.
+4. Tiges filetées.
+5. Grugeage des pièces uniques (profilés).
+
+CISAILLE + POINÇONNEUSE FICEP P803
+
+1. Trusquinage (distance axe du trou → bord) ≥ 25 mm.
+2. Poinçonnage / perçage : Ø maxi ≤ 32 mm.
+3. Longueur maxi de la pièce : 800 mm.
+4. Largeur maxi de la pièce : 500 mm.
+5. Trous oblongs : NON exécutables.
+6. Épaisseur de tôle maxi : 15 mm.
+7. Cisaille guillotine : épaisseur maxi 15 mm, longueur de coupe maxi 4000 mm, coupes droites uniquement.
+
+FICEP A164
+
+1. Ø mini poinçonnable selon l'épaisseur : Ø8 si ép. ≤ 6 mm ; Ø10 si ép. ≤ 8 mm ; Ø12 si ép. ≤ 10 mm.
+2. Fers plats : largeur 50 à 160 mm.
+3. Cornières : aile 30 à 160 mm.
+4. Longueur mini de la barre chargée : ≥ 2050 mm.
+5. Trusquinage : selon le document F4.
+6. Coupe droite uniquement : les chanfreins sont à reprendre en manuel.
+7. Fers plats de longueur > 800 mm : le moyen de débitage est l'A164 (au-delà de la longueur maxi P803).
+
+FICEP GEMINI 254 PG
+
+1. Toutes les pièces avec trous Ø ≥ 32 mm.
+2. Toutes les pièces avec trous oblongs.
+3. Découpe plasma : tôle ≤ 35 mm ; découpe oxycoupage : tôle ≤ 80 mm.
+4. Nombre d'outils (Ø de perçage différents) par nesting : ≤ 7.
+5. Pièce de sortie mini : 100 x 100 mm. Une pièce plus étroite est signalée « DÉPASSEMENT – sortie mini » (micro-attaches ou évacuation manuelle).
+6. Épaisseur mini : 5 mm.
+
+FICEP 1003 DEB
+
+1. Fers plats acceptés uniquement si largeur ≥ 200 mm ET épaisseur ≥ 15 mm. Un fer plat plus étroit ou plus mince ne passe pas sur la 1003 DEB.
+
+TRONÇONNEUSE LINÉAIRE
+
+• Sépare une ébauche de profilé en deux jarrets (coupe longitudinale de l'âme).
+
+4.2 FICHES TECHNIQUES CONSTRUCTEUR
+MACHINE 1 – FICEP A164 : ligne d'usinage de cornières et de fers plats
+
+• Cornières (acier 410 N/mm²) : mini 30x30x3 mm, maxi 160x160x19 mm.
+• Fers plats (outillage en option) : mini 50x5 mm, maxi 160x19 mm.
+• Poinçonnage : 720 kN ; 2 diamètres par aile ; Ø maxi 32 mm (outillage standard) ; Ø x ép. maxi 30x19 (410 N/mm²) et 25x19 (510 N/mm²).
+• Coupe : 2200 kN (cisaillage).
+• Translation barre : 40 m/min ; trusquin : 7 m/min ; 6 axes CNC.
+• Chute mini de fin de barre : 220 mm.
+• Tolérances : UNI 5783-73, UNI 5784-73.
+
+MACHINE 2 – FICEP GEMINI 254 PG : portique CNC de perçage, fraisage et coupe thermique de tôles
+
+• Tôle à l'entrée : longueur 1250 à 12100 mm ; largeur 800 à 2540 mm.
+• Pièce à la sortie : mini 100 x 100 mm.
+• Perçage : 1 tête verticale ; Ø maxi 32 mm ; épaisseur 5 à 80 mm ; poussée 3200 N ; broche 11 kW, 250 à 6000 tr/min.
+• Fraisage : Ø maxi 240 mm.
+• Plasma HPR260XD : 38 mm pleine tôle, 27 mm à 45°. Plasma HPR400XD : 50 mm pleine tôle, 35 mm à 45°.
+• Vitesses : X 32 m/min ; Y et U 42 m/min. Hauteur de travail : 650 mm.
+• Normes : UNI EN 10025, UNI EN 10029.
+
+MACHINE 3 – FICEP 1003 DEB : ligne de perçage et de sciage CNC pour profilés
+
+• Hauteur 80 à 1015 mm ; largeur 10 à 450 mm ; longueur mini transférable 2500 mm.
+• Poutrelles I/H : h 80 à 1015, ailes 42 à 450. Fers U : h 80 à 1015, ailes 45 à 300.
+• Cornières : 80x80x8 à 250x250x40. Plats : largeur 100 à 1000.
+• Tubes carrés : 80x80 à 450x450. Tubes rectangulaires : 80x40 à 1000x450.
+• Perçage : 3 têtes ; Ø maxi 40 mm ; épaisseur maxi 100 mm ; ISO 40 ; 27 kW.
+• Sciage : à 90° mini 80x10 et maxi 1015x450 ; à 45° maxi 620x450 ; à 60° maxi 350x350. → Pour les fers plats, la règle atelier (largeur ≥ 200 et ép. ≥ 15) s'applique.
+• Poids maxi : 5400 kg ; 220 kg/m.
+• Chute mini de fin de barre : non fournie → « DONNÉE MANQUANTE ».
+
+SECTION 5 – RÈGLES D'AFFECTATION (appliquer dans cet ordre, la première qui convient l'emporte)
+
+1. Fer rond, tige filetée, grugeage de pièce unique → MANUEL.
+2. Tube sans trous et à coupes d'équerre → MANUEL.
+3. Cornière sans trous de longueur ≤ 2050 mm → MANUEL.
+4. Jarret → TRONÇONNEUSE LINÉAIRE. L'ébauche est débitée sur la 1003 DEB et comptée dans la mise en barre ; 1 ébauche = 2 jarrets.
+5. Poutrelles IPE/HEA/HEB, fers U, tubes percés ou à coupe biaise, cornières ≥ 80x80x8 percées → 1003 DEB. Une pièce < 2500 mm est débitée en fin de barre (à signaler).
+6. Cornière percée de 30 à 160 mm (hors règle 5) → A164 (vérifier le Ø mini selon l'épaisseur).
+7. Tôle ou plat avec un trou Ø ≥ 32 mm ou un trou oblong → GEMINI (épaisseur concernée).
+8. Pièce de moins de 100 x 100 mm → CHUTES. Si percée : P803 si trusquinage ≥ 25 mm, sinon perçage MANUEL.
+9. Fer plat retenu (section 6) de largeur ≥ 200 mm et ép. ≥ 15 mm → 1003 DEB.
+10. Fer plat retenu dont la longueur totale cumulée par section (somme qté × L de toutes les pièces de même largeur × épaisseur) est < 3000 mm → pas d'achat de barre : débit dans les CHUTES de tôle de même épaisseur, sur CISAILLE + P803 (si L ≤ 800 et règles P803 respectées), sinon intégré au nesting GEMINI de la même épaisseur s'il en existe un. Mention « DÉBIT SUR CHUTES » + moyen retenu.
+11. Fer plat retenu de largeur 50 à 160 mm (hors règle 10) → selon la longueur et les QUANTITÉS : (a) longueur de pièce > 800 mm → A164 ; (b) longueur ≤ 800 mm en série (longueur cumulée de la section ≥ 3000 mm, chargeable en barre ≥ 2050 mm) → A164 ; (c) longueur ≤ 800 mm en petite quantité → règle suivante (CISAILLE / CISAILLE + P803). Si percé, vérifier Ø ≥ Ø mini A164 selon l'épaisseur, sinon GEMINI. Indique en remarque la longueur cumulée qui justifie le choix.
+12. Pièce rectangulaire (chanfreins tolérés) d'ép. ≤ 15 mm :
+
+– sans trou → CISAILLE ;
+– percée, avec L ≤ 800, l ≤ 500, Ø ≤ 32, tous les angles à 90°, trusquinage ≥ 25 et sans oblong → CISAILLE + P803 ;
+– sinon → GEMINI.
+
+13. Toute autre pièce (forme, angles ≠ 90°, ép. > 15 mm) → nesting Steel Project par épaisseur, puis GEMINI (plasma ≤ 35 mm, oxycoupage ≤ 80 mm).
+
+Contrôles systématiques pour chaque repère : dimensions, Ø et épaisseur au droit du trou, trusquinage, longueur mini, nuance (et surclassement éventuel, R4), et longueur de pièce comparée à la longueur de barre achetée.
+
+SECTION 6 – RÈGLE DE CONVERSION TÔLE → FER PLAT
+
+• Pièce RECTANGULAIRE (tous les angles à 90° ; coins coupés à 45° ≤ 25 mm = chanfreins tolérés) dont la largeur et l'épaisseur existent dans F3 → remplacer par ce fer plat. Exemple : tôle ép. 10 x 80 de large → FER PLAT 80x10.
+• Pièce avec au moins un angle ≠ 90° hors chanfreins (gousset, trapèze, échancrure) → RESTE EN TÔLE.
+• Aucun équivalent dans F3 → RESTE EN TÔLE (motif : « pas de FP disponible »).
+• Achat : sauf instruction contraire, les fers plats sont achetés en tôles 3000 x 1500 et refendus à la cisaille. Donne aussi, à titre d'option, les mètres linéaires par section de fer plat. Exception : une section de fer plat dont la longueur cumulée est < 3000 mm n'est pas achetée (débit sur chutes, règle 5.10).
+
+SECTION 7 – TÂCHES À RÉALISER (dans l'ordre)
+Tâche 1 – Comparaison F1 / F2, plan par plan et repère par repère
+
+• F2 peut répartir un même repère sur plusieurs plans (ex. 700 et 701) : ADDITIONNE les quantités de tous les plans avant de comparer.
+• Quantité F1 : compare la quantité du cartouche ET le total du tableau « Répartition par assemblage ». Signale tout écart.
+• Compare : repère (détecter les renommages, ex. W72 ↔ G10), profil, dimensions (rectangle englobant L x l x ép), quantité, nombre et Ø des trous, angles et coupes, nuance.
+• Jarrets : compare la longueur hors-tout F1 et la longueur CN F2 (« À VÉRIFIER ») ; vérifie que la quantité des ébauches jumelées (ex. J6XJ8) = nombre de paires nécessaires.
+• Repère présent dans un seul fichier : le signaler.
+
+Tâche 2 – Tableau de vérification et d'affectation (un seul tableau, tous les repères)
+Tâche 3 – Découpage de F1
+Divise le PDF des croquis en un classeur par moyen : 1003 DEB / A164 / TRONÇONNEUSE / CISAILLE + P803 / CISAILLE / GEMINI ép. x (un par épaisseur) / MANUEL / CHUTES. Donne pour chaque classeur la liste des repères et des numéros de pages.
+
+• Un fichier PDF par classeur, nommé « Affaire_MACHINE.pdf » (ex. 26DU_1003_DEB.pdf, 26DU_GEMINI_ép10.pdf, 26DU_CISAILLE_P803.pdf).
+• Chaque PDF de classeur commence par UNE PAGE DE GARDE (voir section 8), suivie des pages de F1 copiées telles quelles, sans modification ni recadrage, dans l'ordre des repères de F1.
+• Une page de F1 va dans un seul classeur, celui de la machine affectée au repère (tableau 2).
+• Ne crée pas de classeur vide.
+• Le total des pages de F1 réparties dans les classeurs (pages de garde exclues) doit être égal au nombre de pages de F1 : aucune page oubliée, aucune page en double.
+• Livre chaque PDF de classeur séparément, en téléchargement direct dans la discussion. Ne crée AUCUN fichier .zip.
+
+Tâche 3 bis – Tri des jarrets par repère d'assemblage
+Si aucun repère JARRET n'est présent dans F1, cette tâche est sans objet : écrire « Sans objet – aucun jarret », ne pas produire le tableau 2 bis, et passer directement à la tâche 4.
+Avant la mise en barre, identifie pour chaque jarret (repères J…) le ou les repères d'assemblage (FR…) sur lesquels il est soudé, afin de regrouper les jarrets par poutre et de vérifier la cohérence des quantités.
+
+• Source : le tableau « Répartition par assemblage » figurant sur la page F1 de chaque jarret (colonnes Repère, Qté /ass., Nb. ass., Qté tot.). Relève, pour chaque jarret, la liste des repères FR associés.
+• Pour chaque jarret, renseigne : repère du jarret, quantité du cartouche, profilé et longueur F1, liste des repères FR d'assemblage, nombre d'assemblages (Nb. ass.), profilé des poutres FR concernées.
+• Trie la liste par repère FR (ordre alphabétique et numérique, FR1 à FR10 et suivants). Un même FR peut recevoir plusieurs jarrets : regroupe-les sous ce FR, avec leur quantité par FR.
+• Contrôle de cohérence : vérifie que le profilé du jarret correspond au profilé de la poutre FR (ex. jarret IPE220 sur poutre IPE220). En cas d'incohérence, écris « INCOHÉRENCE – profilé ».
+• Contrôle de quantité : vérifie que la quantité totale de jarrets relevée sur les FR (somme des Qté /ass. × Nb. ass.) est égale à la quantité du cartouche du jarret. Si ce n'est pas le cas, écris « ÉCART – quantité jarret » et indique les deux valeurs. Ne corrige pas en silence (R3).
+• Vérifie que le jarret est bien pris en compte à la tâche 4 (ébauche jumelée ou non) et que la quantité d'ébauches est cohérente avec le nombre de jarrets (1 ébauche = 2 jarrets).
+• Un jarret sans repère d'assemblage dans F1 : écris « DONNÉE MANQUANTE – assemblage » et signale-le.
+• Tu produis le tableau 2 bis (section 8). Ce tri ne modifie pas l'affectation machine du jarret (règle 5.4 : TRONÇONNEUSE LINÉAIRE).
+
+Tâche 4 – Mise en barre
+
+• Profilés : barres de 12 m et de 15 m ; choisis, barre par barre, la combinaison qui minimise la longueur totale achetée.
+• Tubes : barres de 6 m. Si une pièce dépasse la barre : « DÉPASSEMENT », propose des barres de 12 m ou un aboutage, et calcule les deux.
+• Cornières : barres de 12 m ; réserve la chute mini A164 de 220 mm.
+• Ébauches de jarrets : incluses dans les barres du profil d'origine. Regroupe les ébauches par profilé et par FR d'assemblage tel qu'établi à la tâche 3 bis.
+• Trait de scie : 5 mm entre chaque pièce. Pour chaque barre, donne : profil, longueur, repères (qté x L), chute, taux d'utilisation, machine.
+• Ne compte pas les fers plats « DÉBIT SUR CHUTES » (règle 5.10) dans la mise en barre ni dans les achats.
+
+Tâche 5 – Mise en tôle (nesting estimatif)
+
+• Fers plats et tôles : tout en tôles de 3000 x 1500 mm, regroupés par épaisseur.
+• Marge de nesting : 5 mm entre pièces et en bord de tôle.
+• Exclure les pièces « CHUTES ». Les fers plats « DÉBIT SUR CHUTES » intégrés à un nesting GEMINI y sont comptés, sans tôle supplémentaire si la chute disponible suffit.
+• Vérifier pour chaque nesting GEMINI : ≤ 7 Ø différents, épaisseur ≤ 35 mm (plasma) ou ≤ 80 mm (oxycoupage). Pour chaque épaisseur, donne : nombre de tôles, surface des pièces, taux de chute, nombre d'outils. Précise que c'est une estimation à valider dans Steel Project.
+• Regroupe dans un même nesting les pièces de même épaisseur de projets différents lorsque c'est possible ; applique alors la règle de surclassement R4 (b) et indique la nuance retenue pour chaque tôle.
+
+Tâche 6 – Bon d'achat
+Regroupe les besoins des tâches 4 et 5 : désignation, dimensions, longueur ou format, quantité, nuance (S275JR, ou nuance surclassée selon R4 pour les tôles, avec le motif), poids unitaire et poids total. Indique les kg/m utilisés et leur source. N'achète rien pour les pièces « CHUTES » et « DÉBIT SUR CHUTES ».
+
+SECTION 8 – FORMAT DE SORTIE
+Livre un classeur Excel (un onglet par tableau, totaux en formules) et les PDF des classeurs par machine (tâche 3), un fichier PDF par classeur. Ne crée AUCUN fichier .zip.
+Chaque fichier (Excel et chaque PDF) doit être présenté dans la discussion avec un bouton « Télécharger ». Un fichier seulement cité dans le texte n'est PAS livré.
+Page de garde de chaque PDF de classeur (obligatoire) – une page en tête de chaque PDF, comprenant :
+
+• Moyen / machine (ex. FICEP A164, GEMINI ép. 10, CISAILLE + P803, MANUEL…), affaire, date, nombre de repères, de pièces et de pages F1.
+• Matière première à utiliser : désignation, dimensions, nuance (surclassement R4 signalé), longueur de barre ou format de tôle, quantité, origine (achat / stock / chutes) – cohérente avec les tableaux 4, 5 et 6.
+• Liste de débit, au format du modèle GROUPE MATEM « Liste de débits » : en-tête « Liste de débits », Date, Projet N° (affaire), Titre (+ machine / moyen) ; puis le tableau | Repère | Profil | Qté | Qualité | Long. (mm) | Surface (m²) | Poids (kg) | Pds Tot (kg) | Désignation | ; profils écrits comme dans le modèle (ex. IPE160, SHS804H, PL870 = ép. x largeur) ; Qualité = nuance retenue (R4) ; Désignation = famille de l'élément (AUVENT, FERME, JARRET, PLAT…) ; ligne finale « Total pour N pièces » avec la surface totale et le poids total (sommes recalculées et vérifiées).
+• Présentation de la liste : par projet pour les classeurs profilés, cornières, fers plats, cisaille, P803 et manuel ; par nesting pour les classeurs GEMINI (un sous-tableau par N° de nesting / tôle, avec son sous-total). Repères triés par ordre alphabétique et numérique, comme dans le modèle.
+
+Tableau 1 – Différences F1 / F2
+Plan F2 | Rep | Élément comparé | Valeur F1 | Valeur F2 | Écart (OUI / NON / À VÉRIFIER) | Action
+Si aucun écart pour un repère : une ligne « Conforme ».
+Tableau 2 – Vérification et affectation
+Rep | Qté | Profil d'origine | Dimensions | Perçages (nb x Ø) | Trusquinage mini | Angles ≠ 90° (O/N) | Profil retenu | Nuance retenue | FP dispo F3 (O/N) | Machine / moyen | Contrôle capacité (OK / DONNÉE MANQUANTE / DÉPASSEMENT / HORS CAPACITÉ) | Remarque | Page F1
+Tableau 2 bis – Tri des jarrets par repère d'assemblage
+Repère FR (assemblage) | Profilé FR | Jarret | Qté jarret (cartouche) | Profilé jarret | Longueur jarret F1 (mm) | Qté /ass. | Nb. ass. | Contrôle profilé | Contrôle quantité | Remarque
+Une ligne par couple (FR, jarret), triée par repère FR. Ajoute un total par repère FR (nombre de jarrets reçus) et le total général de jarrets, comparé au total des cartouches.
+Tableau 3 – Classeurs par machine
+Classeur | Repères | Pages F1 | Nb repères | Nb pièces | Nb pages PDF (garde incluse)
+Tableau 4 – Mise en barre
+Profil | Barre (m) | N° barre | Repères (qté x L) | Longueur utilisée | Chute (mm) | Utilisation % | Machine
+Tableau 5 – Mise en tôle
+Épaisseur | Nb tôles 3000x1500 | Repères | Surface pièces (m²) | Chute % | Machine(s) | Nuance tôle | Projets regroupés | Outils GEMINI (≤ 7)
+Tableau 6 – Bon d'achat (GROUPE MATEM)
+N° | Désignation | Dimensions | Longueur / format | Qté | Nuance | Poids unitaire (kg) | Poids total (kg)
+Ajoute le total du poids par famille (profilés, tubes, cornières, tôles) et le total général."""
+
+
+def construire_prompt(affaire):
+    return PROMPT.format(affaire=affaire)
 
 DELAI_REPONSE = 3600 # secondes d'attente maximale pour la réponse de Claude
 DOSSIER_SORTIE = dossier_sortie_affaire(AFFAIRE)
@@ -517,7 +483,11 @@ def joindre_fichier(fenetre, chemin, essais=3):
     boite.set_focus()
     time.sleep(0.5)
     # Le champ « Nom de fichier » a le focus à l'ouverture : on y tape le chemin complet
-    send_keys(echapper(chemin), with_spaces=True, pause=0.01)
+    # Chemin collé par le presse-papiers (pas tapé touche par touche : la frappe
+    # perdait des lettres, ex. « rojetsATravailler »). ^a remplace le contenu du champ.
+    copier_presse_papiers(chemin)
+    time.sleep(0.3)
+    send_keys("^a^v")
     time.sleep(0.5)
     send_keys("{ENTER}")  # équivaut à cliquer sur « Ouvrir »
 
@@ -526,12 +496,12 @@ def joindre_fichier(fenetre, chemin, essais=3):
         time.sleep(0.5)
     time.sleep(2)
 
-def envoyer_prompt(fenetre):
+def envoyer_prompt(fenetre, affaire):
     zone = zone_message(fenetre)
 
     # Collage par le presse-papiers : quelques secondes au lieu de plusieurs minutes de frappe,
     # et pas de risque qu'une touche pressée pendant la saisie corrompe le prompt
-    copier_presse_papiers(PROMPT)
+    copier_presse_papiers(construire_prompt(affaire))
     zone.click_input()
     time.sleep(0.5)
     send_keys("^v")
@@ -580,6 +550,22 @@ def etat_reponse(fenetre):
     return liste, en_cours
 
 
+def autoriser_une_fois(fenetre):
+    """Accepte « Autoriser une fois » quand Claude demande l'accès à un outil (ex. Bash).
+    Sans ce clic, la demande reste en attente et le script attend la réponse jusqu'au délai.
+    Seul « Autoriser une fois » est cliqué : « Refuser » et « Autoriser toujours » ne le sont jamais."""
+    for c in boutons(fenetre):
+        try:
+            if comparable(c.window_text()).startswith("autoriser une fois") and c.is_visible() and c.is_enabled():
+                c.click_input()
+                print(f"{datetime.now():%H:%M:%S} – demande d'outil acceptée (une fois)")
+                time.sleep(2)
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def etat_au_premier_plan(fenetre):
     """Ramène brièvement Claude au premier plan pour lire des boutons à jour, puis rend la main.
 
@@ -614,6 +600,7 @@ def attendre_tous_les_fichiers(fenetre, timeout, stabilite=120, rafraichissement
     dernier_rafraichissement = time.time()
     liste = []
     while time.time() < fin:
+        autoriser_une_fois(fenetre)  # une demande d'outil (Bash…) bloque sinon la réponse
         if time.time() - dernier_rafraichissement >= rafraichissement:
             liste, en_cours = etat_au_premier_plan(fenetre)
             dernier_rafraichissement = time.time()
@@ -799,6 +786,7 @@ def comparer_avec_claude(fichiers=FICHIERS, dossier_sortie=DOSSIER_SORTIE):
     if manquants:  # vérifié avant d'ouvrir une discussion
         raise FileNotFoundError("Fichier(s) introuvable(s) :\n" + "\n".join(manquants))
 
+    affaire = os.path.basename(os.path.dirname(os.path.normpath(dossier_sortie)))
     fenetre = fenetre_claude()
 
     nouvelle_discussion(fenetre)
@@ -808,7 +796,7 @@ def comparer_avec_claude(fichiers=FICHIERS, dossier_sortie=DOSSIER_SORTIE):
         joindre_fichier(fenetre, chemin)
     fenetre.set_focus()
     print("Les fichiers sont joints. Envoi du prompt...")
-    envoyer_prompt(fenetre)
+    envoyer_prompt(fenetre, affaire)
     print(f"Message envoyé. Attente de la réponse (jusqu'à {DELAI_REPONSE} s)...")
     return enregistrer_fichiers_produits(fenetre, dossier_sortie)
 

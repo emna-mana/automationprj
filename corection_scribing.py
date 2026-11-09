@@ -1,7 +1,9 @@
 import ctypes
 import operator
+import sys
 import time
 
+from _ctypes import COMError
 import win32clipboard
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys
@@ -83,57 +85,85 @@ def grille_parametres(fenetre_dessin):
             return g
     raise RuntimeError("Grille Paramètres / Valeur introuvable")
 
-def ecrire_valeur(fenetre_dessin, ligne, valeur):
-    # Écrit une valeur dans la colonne Valeur. ligne = index dans la grille (0 = X, 1 = Y, ...)
+# Grille Paramètres : UI Automation ne donne que les barres de défilement, pas les lignes.
+# Positions mesurées sur les captures (coordonnées relatives au haut de la grille) :
+# en-tête d'environ 32 px, puis une ligne tous les 27,5 px. Ordre des lignes : X, Y, Texte, Angle,
+# Hauteur, Face, Type…
+LIGNES = {"X": 0, "Y": 1, "Texte": 2, "Angle": 3, "Hauteur": 4, "Face": 5, "Type": 6}
+PREMIERE_LIGNE_Y = 43
+HAUTEUR_LIGNE = 27.5
+
+
+def point_cellule(grille, libelle):
+    # Point à cliquer dans la colonne Valeur, sur la ligne « libelle » (relatif à la grille)
+    ligne = LIGNES[libelle]
+    gr = grille.rectangle()
+    return int(gr.width() * 0.7), int(PREMIERE_LIGNE_Y + HAUTEUR_LIGNE * ligne)
+
+
+def ecrire_valeur(fenetre_dessin, libelle, valeur):
+    # Écrit une valeur dans la colonne Valeur de la ligne « libelle » (ex. « X », « Y »)
     grille = grille_parametres(fenetre_dessin)
-    r = grille.rectangle()
-    x_rel = int(r.width() * 0.7)   # colonne Valeur
-    y_rel = 35 + ligne * 22        # en-tête d'environ 35 px, lignes de 22 px
-    grille.double_click_input(coords=(x_rel, y_rel))
+    x, y = point_cellule(grille, libelle)
+    grille.double_click_input(coords=(x, y))
     time.sleep(0.3)
-    # Fin de la valeur, efface la valeur par défaut (ex. « 0.00 ») puis tape la nouvelle.
-    # Ctrl+A ne sélectionne pas le texte dans cette cellule : on efface avec Retour arrière.
+    # Fin de la valeur, efface la valeur par défaut puis tape la nouvelle.
     # Valide avec Tab (pas Entrée : Entrée déclenche le bouton par défaut « Appliquer »)
     send_keys("{END}{BACKSPACE 15}" + pp.echapper_keys(str(valeur)) + "{TAB}")
     time.sleep(0.3)
 
+
 def choisir_type_scribing(fenetre_dessin):
-    # Liste déroulante « Type » : index 6 (7e ligne, en comptant à partir de 0)
-    # Clic sur la cellule, F4 ouvre la liste, 2 flèches bas (Normal -> Disque -> Scribing),
-    # puis Tab valide. Pas d'Entrée : elle déclenche le bouton Appliquer.
+    # Liste déroulante « Type » : clic sur la cellule, F4 ouvre la liste, 2 flèches bas
+    # (Normal -> Disque -> Scribing), puis Tab valide. Pas d'Entrée : elle déclenche Appliquer.
     grille = grille_parametres(fenetre_dessin)
-    r = grille.rectangle()
-    x_rel = int(r.width() * 0.7)   # colonne Valeur
-    y_rel = 35 + 6 * 22            # ligne Type
-    grille.double_click_input(coords=(x_rel, y_rel))
+    x, y = point_cellule(grille, "Type")
+    grille.double_click_input(coords=(x, y))
     time.sleep(5)
     send_keys("{DOWN 2}{TAB}")
     time.sleep(3)
 
-def ecrire_texte_affaire(fenetre_dessin, affaire, ligne=2):
-    # Ligne « Texte » (index 2) : Texte = texte existant + X + affaire + X + texte existant
+
+def lire_texte_cellule(grille):
+    # Copie le texte de la cellule « Texte » en édition (Ctrl+A, Ctrl+C) et le lit dans le presse-papiers
+    x, y = point_cellule(grille, "Texte")
+    for essai in range(2):
+        if essai == 0:
+            grille.double_click_input(coords=(x, y))
+        else:
+            grille.click_input(coords=(x, y))
+            time.sleep(0.3)
+            send_keys("{F2}")
+        time.sleep(0.5)
+        vider_presse_papiers()
+        send_keys("^a^c")
+        time.sleep(0.8)
+        texte = lire_presse_papiers().strip()
+        if texte:
+            return texte
+        send_keys("{ESC}")
+        time.sleep(0.5)
+    return ""
+
+
+def ecrire_texte_affaire(fenetre_dessin, affaire):
+    # Ligne « Texte » : Texte = texte existant + X + affaire + X + texte existant
     grille = grille_parametres(fenetre_dessin)
-    r = grille.rectangle()
-    x_rel = int(r.width() * 0.7)   # colonne Valeur
-    y_rel = 35 + ligne * 22        # ligne Texte
-    grille.double_click_input(coords=(x_rel, y_rel))
-    time.sleep(0.3)
-    # Presse-papiers vidé avant la copie : un champ vide ne doit pas recoller l'ancien contenu
-    vider_presse_papiers()
-    send_keys("^a^c")              # copie le texte existant
-    time.sleep(0.3)
-    texte = lire_presse_papiers().strip()
-    marque = "X" + affaire + "X"
+    texte = lire_texte_cellule(grille)
+    print(f"  Texte du marquage lu : {texte!r}")
     if not texte:
-        send_keys("{TAB}")
-        raise RuntimeError("Texte du marquage vide : rien à recopier autour de l'affaire")
+        raise RuntimeError("Texte du marquage vide : la cellule Texte n'a pas été lue")
+    marque = "X" + affaire + "X"
     if marque in texte:
-        send_keys("{TAB}")         # déjà corrigé (script relancé) : texte laissé tel quel
         print(f"  Texte déjà corrigé : {texte!r}")
         return
-    # Fin du texte (texte existant conservé), puis X + affaire + X, puis le texte copié (Ctrl+V), Tab valide
-    send_keys("{END}" + pp.echapper_keys(marque) + "^v{TAB}")
+    x, y = point_cellule(grille, "Texte")
+    grille.double_click_input(coords=(x, y))
     time.sleep(0.3)
+    # Curseur en fin de texte, puis X + affaire + X, puis le texte existant ; Tab valide
+    send_keys("{END}" + pp.echapper_keys(marque + texte) + "{TAB}")
+    time.sleep(0.5)
+
 
 def enregistrer_dessin(fenetre_dessin):
     # Ctrl+S dans la fenêtre de dessin, puis attente de la fin de l'enregistrement avant de la fermer
@@ -172,13 +202,45 @@ def lire_presse_papiers():
         win32clipboard.CloseClipboard()
 
 
+def fenetres_de_dessin(affaire):
+    # Fenêtres de dessin déjà ouvertes (titre du type « 02IV \\ J2 »)
+    return [w for w in DESKTOP.windows() if affaire in w.window_text() and "\\" in w.window_text()]
+
+
+def fenetre_principale():
+    # Steel Projects peut être recréée (ex. après fermeture de « Gestion d'Affaires » pendant la
+    # comparaison Claude) : on reprend toujours la fenêtre fraîche, pas un ancien objet
+    return DESKTOP.window(title_re=".*Steel Projects.*", found_index=0)
+
+
+def attendre_principale(window, essais=5):
+    # Attend la fin de travail de la fenêtre principale. Si son handle a disparu (COMError),
+    # on la reprend et on réessaie
+    for essai in range(essais):
+        try:
+            window.set_focus()
+            pp.attendre_appli(window)
+            return window
+        except COMError:
+            print(f"  Fenêtre Steel Projects à reprendre (essai {essai + 1}/{essais})")
+            time.sleep(2)
+            window = fenetre_principale()
+    raise RuntimeError("Fenêtre Steel Projects introuvable après plusieurs essais")
+
+
 def corriger_scribing_jarret(window, affaire):
     # Repères secondaires dont le profil contient « _ » : pour chacun, sélection de la ligne,
     # puis Ctrl+D, clic sur le plan, actions dans la fenêtre ouverte, qu'on ferme avant le suivant.
     # Suppose que Gestion de production est ouverte et l'affaire filtrée (fait dans main_complet).
-    window.set_focus()
+    # Une fenêtre de dessin restée ouverte (ex. d'un test) empêche de reconnaître celle du Ctrl+D
+    ouvertes = fenetres_de_dessin(affaire)
+    if ouvertes:
+        raise RuntimeError("Ferme d'abord les fenêtres de dessin déjà ouvertes : "
+                           + ", ".join(w.window_text() for w in ouvertes))
+    # La fenêtre reçue peut être périmée (comparaison Claude entre-temps) : on la reprend
+    window = attendre_principale(fenetre_principale())
     send_keys("^{F6}")  # vue Repère secondaire
-    pp.attendre_appli(window)
+    window = attendre_principale(window)
 
     nb = len(index_profils_underscore(window))
     print(f"{nb} repère(s) secondaire(s) avec « _ » dans le profil")
@@ -193,28 +255,32 @@ def corriger_scribing_jarret(window, affaire):
         print(f"[{k + 1}/{nb}] Profil {profil}")
 
         selectionner_une_ligne(ligne_de_profil(window, index))
-        pp.attendre_appli(window)
+        window = attendre_principale(window)
 
         avant = {w.handle for w in DESKTOP.windows()}
         send_keys("^d")
         nouvelle = attendre_nouvelle_fenetre(avant, affaire)
         if nouvelle is None:
-            raise RuntimeError(f"Ctrl+D n'a ouvert aucune nouvelle fenêtre pour le profil {profil}")
+            titres = [w.window_text() for w in DESKTOP.windows() if "\\" in w.window_text()]
+            raise RuntimeError(f"Ctrl+D n'a ouvert aucune nouvelle fenêtre pour le profil {profil} "
+                               f"(affaire cherchée : {affaire!r} ; fenêtres avec « \\ » : {titres})")
 
         cliquer_plan(nouvelle)
         cliquer_marquage(nouvelle)
+        time.sleep(2)   # la grille Paramètres passe en mode marquage
         traiter_fenetre_ctrl_d(nouvelle, profil)
         time.sleep(1)
-        ecrire_valeur(nouvelle, 0, 100)    # X = 100
-        ecrire_valeur(nouvelle, 1, -100)   # Y = -100
+        ecrire_valeur(nouvelle, "X", 100)    # X = 100
+        ecrire_valeur(nouvelle, "Y", -100)   # Y = -100
         ecrire_texte_affaire(nouvelle, affaire)  # Texte = texte existant + X + affaire + X + texte existant
         choisir_type_scribing(nouvelle)
         cliquer_appliquer_parametres(nouvelle)  # valide les paramètres dans le dessin
         time.sleep(1)
         enregistrer_dessin(nouvelle)            # Ctrl+S : enregistre le dessin
         fermer_fenetre(nouvelle)
-        pp.attendre_appli(window)
-        window.set_focus()
+        time.sleep(2)
+        # La fenêtre principale peut être recréée après la fermeture du dessin : on la reprend
+        window = attendre_principale(fenetre_principale())
 
 
 def main_complet():
@@ -224,7 +290,9 @@ def main_complet():
     if "Gestion de production" not in window.window_text():
         pp.ouvrir_gestion_production(window)
     pp.filtrer_par_affaire(window)
-    corriger_scribing_jarret(window, pp.AFFAIRE)
+    affaire = sys.argv[1] if len(sys.argv) > 1 else pp.AFFAIRE
+    print(f"Affaire utilisée : {affaire}")
+    corriger_scribing_jarret(window, affaire)
 
 
 if __name__ == "__main__":
