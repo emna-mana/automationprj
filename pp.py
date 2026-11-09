@@ -31,7 +31,6 @@ EXE_PATH = CHEMINS["steel_projects_exe"]
 IMPORT_DIRECTORY = os.path.join(CHEMINS["dossier_sources"], "02IV")
 AFFAIRE = os.path.basename(os.path.normpath(IMPORT_DIRECTORY))  # transmise à claude pour la comparaison
 DOSSIER_PROJETS_TRAVAILLER = CHEMINS["dossier_projets"]
-PATRON_JARRET = re.compile(r"^\S+_\d+(\.\d+)?$")
 PHASE_MIN = 130
 PHASE_MAX = 140
 COMMENTAIRE_2 = "PU"
@@ -424,20 +423,7 @@ def valider_profils_stricts(window, timeout=60):
     log.info("Profil Strict : %d profil(s) enregistré(s)", len(ajoutes))
     return True
 
-def attendre_une_des_fenetres(window, titres_re, timeout=600):
-    # Attend qu'une des fenêtres (titres en expressions régulières) soit visible ; renvoie son motif
-    def visible():
-        for titre_re in titres_re:
-            for f in (window.child_window(title_re=titre_re),
-                      DESKTOP.window(title_re=titre_re, top_level_only=True)):
-                try:
-                    if f.exists(timeout=0) and f.is_visible():
-                        return titre_re
-                except COMError:
-                    pass
-        return None
 
-    return wait_until(timeout, 0.5, visible, None, operator.is_not)
 def lister_fenetres_ouvertes():
     # Journalise le titre de chaque fenêtre ouverte (diagnostic en cas de blocage)
     for w in DESKTOP.windows(top_level_only=True):
@@ -482,6 +468,7 @@ def valider_comparaison_affaire(window, timeout=60):
     comparaison.wait_not("exists visible", timeout=60, retry_interval=0.5)
     log.info("Fenêtre « Comparaison [Affaire] » fermée")
     return True
+
 
 def importer_tekla(window, dossier_xml):
     # Importe les fichiers XML Tekla du dossier donné ; journalise chaque étape
@@ -538,7 +525,8 @@ def importer_tekla(window, dossier_xml):
     log.info("Validation finale (FormConfigLog)")
     finir_import(window)
     log.info("IMPORT XML : terminé")
-    
+
+
 def finir_import(window, timeout=3600):
     # Attend la fin de l'import (la comparaison de profils est validée si elle apparaît),
     # puis clique sur Ok final

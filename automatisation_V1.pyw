@@ -45,10 +45,10 @@ COMMENTAIRE_GR = "GR"    # commentaire 2 des repères secondaires dont le profil
 DOSSIER_PROJETS_TRAVAILLER = CHEMINS["dossier_projets"]
 
 COMPARAISON_CLAUDE = True    # comparaison avec Claude après l'impression
-CORRECTION_SCRIBING = True   # correction du scribing des repères « _ » (Ctrl+D)
+CORRECTION_SCRIBING = False  # correction du scribing des repères « _ » (Ctrl+D)
 AFFECTATION_MACHINE = True   # affectation depuis le classeur de Claude
 CONVERSION_FERS_PLATS = True # conversion des tôles retenues en fers plats
-FORMAT_IMPORT = "TEKLA_XML"
+FORMAT_IMPORT = "CAM3D"
 
 FICHIER_LOG = "workflow_steel_projects.log"
 
@@ -233,7 +233,9 @@ def importer_cam3d_projet(window, dossier_projet):
             raise RuntimeError("Le dialogue CAM3D reste ouvert après le clic sur OK et la touche Entrée") from exc
 
     valider_ventilation_plans(window)
+    # Ensuite : « Profil Strict » (+ sur chaque profil, puis Ok), puis « Comparaison [Affaire] » (Ajouter, Ok)
     pp.valider_profils_stricts(window, timeout=60)
+    pp.valider_comparaison_affaire(window, timeout=60)
     pp.finir_import(window)
 
 
@@ -278,9 +280,10 @@ def traiter_projet(window, dossier_projet):
     if CORRECTION_SCRIBING or AFFECTATION_MACHINE or CONVERSION_FERS_PLATS:
         pp.ouvrir_gestion_production(window)
         pp.filtrer_par_affaire(window)
-        if CORRECTION_SCRIBING:
-            log.info("=== Correction scribing jarret ===")
-            corection_scribing.corriger_scribing_jarret(window, affaire)
+        # Correction scribing jarret désactivée (bloc commenté)
+#        if CORRECTION_SCRIBING:
+#            log.info("=== Correction scribing jarret ===")
+#            corection_scribing.corriger_scribing_jarret(window, affaire)
         if AFFECTATION_MACHINE:
             log.info("=== Affectation machine ===")
             affectation_machine.affectation_machine(window, affaire)
