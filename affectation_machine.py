@@ -47,10 +47,22 @@ def lire_onglet(chemin, mots=MOTS_ONGLET):
     )
 
     try:
-        # Nom variable selon Claude (« T2 Vérification-affectation », « T2_Verif_Affectation »...) :
-        # accents et majuscules ignorés, on cherche seulement un des mots de MOTS_ONGLET
+        # 1) Nom d'onglet contenant un des mots (« T2_Verif_Affectation », « T2 Vérification-affectation »...)
         noms_valides = [n for n in wb.sheetnames
                         if any(m in claude.comparable(n) for m in mots)]
+
+        # 2) Repli : titre dans les 5 premières lignes contenant TOUS les mots
+        #    (ex. « Tableau 2 – Vérification et affectation » en A1, onglet nommé « Tableau 2 »)
+        if not noms_valides:
+            for n in wb.sheetnames:
+                titre = " ".join(
+                    str(v)
+                    for ligne in wb[n].iter_rows(max_row=5, values_only=True)
+                    for v in ligne if v is not None
+                )
+                if all(m in claude.comparable(titre) for m in mots):
+                    noms_valides.append(n)
+                    break
 
         if not noms_valides:
             raise ValueError(

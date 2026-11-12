@@ -9,6 +9,7 @@ import time
 
 from _ctypes import COMError
 from pywinauto import Desktop
+from pywinauto import mouse
 from pywinauto.application import Application
 from pywinauto.keyboard import send_keys
 from pywinauto.timings import TimeoutError as DelaiDepasse
@@ -24,7 +25,8 @@ import configuration
 log = logging.getLogger("workflow")
 
 # ===== CONFIGURATION =====
-USERNAME, PASSWORD = configuration.charger_identifiants()
+USERNAME = "eba"
+PASSWORD = "EBA2026"
 CHEMINS = configuration.charger_chemins()
 EXE_PATH = CHEMINS["steel_projects_exe"]
 IMPORT_DIRECTORY = os.path.join(CHEMINS["dossier_sources"], "02IV")
@@ -47,7 +49,11 @@ TITRE_BOITE_PDF = "Enregistrer le fichier PDF sous"
 # ===== OUTILS =====
 def attendre(ctrl, etat="exists visible enabled", timeout=30):
     # Attend qu'un contrôle soit dans l'état voulu, puis le renvoie
-    ctrl.wait(etat, timeout=timeout, retry_interval=0.2)
+    if hasattr(ctrl, "wait"):
+        ctrl.wait(etat, timeout=timeout, retry_interval=0.2)
+    else:
+        # Élément trouvé directement (wrapper) : même attente, avec les méthodes du wrapper
+        wait_until(timeout, 0.2, ctrl.is_visible)   # visible seulement : Action peut rester grisé
     return ctrl
 
 def echapper_keys(texte):
@@ -115,14 +121,31 @@ def attendre_appli(window, timeout=30):
     app.wait_cpu_usage_lower(threshold=5, timeout=timeout)
 
 
+def trouver_comparaison_profils_externe():
+    # La comparaison de profils CAM3D est une fenêtre séparée (titre « Import ») : on la cherche sur le bureau
+    for w in DESKTOP.windows(title="Import", top_level_only=True):
+        try:
+            entetes = w.descendants(control_type="Header")
+            if any(e.window_text().startswith("Cat") for e in entetes):
+                return DESKTOP.window(handle=w.handle)
+        except COMError:
+            pass
+    return None
+
+
 def valider_comparaison(window):
-    # Si la fenêtre de comparaison de profils est ouverte, clique sur Ok
+    # Si la fenêtre de comparaison de profils est ouverte, clique sur Ok (intégrée ou fenêtre séparée)
     comparaison = window.child_window(auto_id="FormProfileComparison", control_type="Window")
-    if not comparaison.exists(timeout=0):
-        return False
-    barre = comparaison.child_window(auto_id="stateBar", control_type="Pane")
-    attendre(barre.child_window(title="Ok", control_type="Button")).invoke()
-    comparaison.wait_not("exists", timeout=30, retry_interval=0.2)
+    if comparaison.exists(timeout=0):
+        barre = comparaison.child_window(auto_id="stateBar", control_type="Pane")
+        attendre(barre.child_window(title="Ok", control_type="Button")).invoke()
+        comparaison.wait_not("exists", timeout=30, retry_interval=0.2)
+    else:
+        externe = trouver_comparaison_profils_externe()
+        if externe is None:
+            return False
+        cliquer_sans_souris(externe.child_window(title="Ok", control_type="Button"))
+        externe.wait_not("exists visible", timeout=30, retry_interval=0.2)
     print("Comparaison de profils validée")
     return True
 
@@ -204,21 +227,140 @@ def afficher_colonne(grille, colonne):
             print(f"  {ligne.window_text()} | {colonne} = {valeur_cellule(ligne, colonne)!r}")
 
 
-def remplir_commentaire_2(window, texte):
-    # Fenêtre d'édition des repères (ouverte par Entrée) : écrit texte dans Commentaire 2, valide, quitte
-    repere = window.child_window(auto_id="SpForm", control_type="Window")
-    attendre(repere, "exists visible")
+def trouver_fiche_repere(window, timeout=30):
+    # La fiche s'ouvre soit dans la fenêtre principale, soit en fenêtre séparée (un seul repère)
+    dedans = window.child_window(auto_id="SpForm", control_type="Window")
+    separee = DESKTOP.window(auto_id="SpForm", top_level_only=True)
 
-    onglets = repere.child_window(auto_id="tsGeneral", control_type="Pane")
-    cliquer(onglets.child_window(control_type="TreeItem", found_index=3))
+    def visible():
+        for f in (dedans, separee):
+            try:
+                if f.exists(timeout=0) and f.is_visible():
+                    return f
+            except COMError:
+                pass  # appli occupée : on réessaie
+        return None
 
-    com2 = attendre(repere.child_window(auto_id="tbCom2", control_type="Edit"))
-    com2.click_input()
-    com2.type_keys("^a{BACKSPACE}" + texte, with_spaces=True)
+    return wait_until(timeout, 0.5, visible, None, operator.is_not)
 
-    cliquer(repere.child_window(title="Valider", control_type="Button"))
-    cliquer(repere.child_window(title="Quitter", control_type="Button"))
-    repere.wait_not("exists", timeout=30, retry_interval=0.2)
+
+def champ_commentaire_2_fiche_seule(fiche):
+    # Fiche individuelle : les onglets (Commentaire, Commentaire 2...) ne sont pas exposés par leur nom.
+    # 1) le champ Commentaire 2 est déjà dans l'arbre ? 2) sinon clic sur l'onglet, placé par rapport
+    # à la zone de texte « Commentaire » (tbCmt1) : l'onglet Commentaire 2 est à 0,436 de sa largeur.
+    champ = fiche.child_window(auto_id="tbCmt2", control_type="Edit")
+    try:
+        if champ.exists(timeout=1) and champ.is_visible():
+            return champ
+    except COMError:
+        pass
+
+    # Clic dans la zone « Commentaire » (n'importe où dedans), puis Ctrl+Tab : onglet suivant.
+    # Pas de coordonnées d'onglet : le résultat ne dépend pas de la taille de la fiche.
+    zone = attendre(fiche.child_window(auto_id="tbCmt1", control_type="Edit")).wrapper_object().rectangle()
+    fiche.set_focus()
+    # Onglets : éléments non nommés juste au-dessus de la zone « Commentaire », triés de gauche à droite.
+    # Positions relatives à la zone : valables quelle que soit la taille de la fiche.
+    candidats = []
+    for e in fiche.wrapper_object().descendants():
+        try:
+            r = e.rectangle()
+            if (zone.top - 30 <= r.bottom <= zone.top + 5
+                    and zone.left - 5 <= r.left and r.right <= zone.right + 5
+                    and 20 < r.width() < 300 and r.height() <= 40):
+                candidats.append((r.left, r, e))
+        except COMError:
+            pass
+    candidats.sort(key=lambda c: c[0])
+    onglets = []
+    for left, r, e in candidats:
+        if not onglets or left - onglets[-1][0] > 5:   # un seul élément par onglet
+            onglets.append((left, r, e))
+    log.info("Onglets détectés (gauche -> droite) : %s", [str(r) for _, r, _ in onglets])
+    if len(onglets) < 2:
+        raise RuntimeError(f"Onglet Commentaire 2 non détecté (onglets trouvés : {len(onglets)}, zone {zone})")
+    onglets[1][2].click_input()   # 1er = Commentaire, 2e = Commentaire 2
+    log.info("Onglet Commentaire 2 cliqué")
+    time.sleep(0.5)
+
+    try:
+        return attendre(champ, timeout=10)
+    except DelaiDepasse:
+        # Diagnostic : champs et boutons de la fiche (identifiant et position), à m'envoyer
+        n = 0
+        for e in fiche.wrapper_object().descendants():
+            try:
+                info = e.element_info
+                if info.control_type in ("Edit", "Document", "Tab", "TabItem", "Text", "Button"):
+                    log.warning("Diagnostic fiche : %s | %r | auto_id=%r | %s",
+                                info.control_type, info.name, info.automation_id, e.rectangle())
+                    n += 1
+                    if n >= 80:
+                        break
+            except COMError:
+                pass
+        raise RuntimeError(
+            "Champ Commentaire 2 introuvable après Ctrl+Tab (voir Diagnostic fiche dans le journal)"
+        )
+
+
+def fermer_fiche_repere(fiche):
+    # Ferme la fiche sans enregistrer : Annuler, Quitter, puis Non si Steel Projects demande d'enregistrer
+    try:
+        fiche.set_focus()
+        annuler = fiche.child_window(title="Annuler", control_type="Button")
+        if annuler.exists(timeout=0) and annuler.is_enabled():
+            annuler.click_input()
+        quitter = fiche.child_window(title="Quitter", control_type="Button")
+        if quitter.exists(timeout=0):
+            quitter.click_input()
+        else:
+            # Bouton Quitter non trouvé par son type : recherche par son texte, quel que soit le type
+            for e in fiche.wrapper_object().descendants():
+                if (e.window_text() or "").strip() == "Quitter":
+                    e.click_input()
+                    break
+        non = fiche.child_window(title="Non", control_type="Button")
+        if non.exists(timeout=2):
+            non.click_input()
+        fiche.wait_not("exists", timeout=30, retry_interval=0.2)
+    except Exception:
+        log.warning("Impossible de fermer la fiche repère proprement")
+
+
+def remplir_commentaire_2(window, texte, nb_lignes):
+    # Fiche des repères : 1 ligne = fiche individuelle ; 2 lignes ou plus = fiche multiple (onglet de l'arbre)
+    fiche = trouver_fiche_repere(window)
+    try:
+        _remplir_fiche_repere(fiche, texte, nb_lignes)
+    except Exception:
+        fermer_fiche_repere(fiche)   # ne pas laisser la fiche ouverte après une erreur
+        raise
+
+
+def _remplir_fiche_repere(fiche, texte, nb_lignes):
+    fiche.set_focus()
+    attendre(fiche, "exists visible")
+
+    if nb_lignes > 1:
+        onglets = fiche.child_window(auto_id="tsGeneral", control_type="Pane")
+        cliquer(onglets.child_window(control_type="TreeItem", found_index=3))
+        champ = attendre(fiche.child_window(auto_id="tbCom2", control_type="Edit"))
+    else:
+        champ = champ_commentaire_2_fiche_seule(fiche)
+
+    # Vidage sans clavier : l'Entrée qui ouvre la fiche peut laisser un retour à la ligne
+    champ.set_edit_text("")
+    champ.click_input()
+    champ.type_keys(echapper_keys(texte), with_spaces=True)
+    try:
+        wait_until(5, 0.2, lambda: (champ.get_value() or "").strip() == texte)
+    except DelaiDepasse:
+        raise RuntimeError(f"Commentaire 2 incorrect : {champ.get_value()!r} au lieu de {texte!r}")
+
+    cliquer(fiche.child_window(title="Valider", control_type="Button"))
+    cliquer(fiche.child_window(title="Quitter", control_type="Button"))
+    fiche.wait_not("exists", timeout=30, retry_interval=0.2)
 
 
 def focus_grille_haut(window, timeout=30):
@@ -538,15 +680,28 @@ def finir_import(window, timeout=3600):
 
 
 def ouvrir_gestion_production(window):
-    # Ouvre l'écran Gestion de production
+    # Ouvre l'écran Gestion de production et attend qu'il soit réellement chargé
     window.set_focus()
     cliquer_sans_souris(window.child_window(title="Gestion de production", control_type="Button"))
-    toolbar = window.child_window(auto_id="toolBar", control_type="ToolBar", found_index=0)
+
+    # 1) Le titre passe à « Steel Projects - Gestion de production » (l'écran est ouvert)
     try:
-        attendre(toolbar, "exists visible", timeout=60)
+        wait_until(120, 0.5, lambda: "Gestion de production" in window.window_text())
     except DelaiDepasse:
         raise RuntimeError("Gestion de production ne s'est pas ouverte "
                            f"(fenêtre au premier plan : {titre_premier_plan()!r})")
+
+    # 2) Attendre la fin du chargement (import de gros projets : plus long)
+    attendre_appli(window, timeout=180)
+
+    # 3) Barre d'outils de l'écran : délai allongé, 180 s au lieu de 60
+    toolbar = window.child_window(auto_id="toolBar", control_type="ToolBar", found_index=0)
+    try:
+        attendre(toolbar, "exists visible", timeout=180)
+    except DelaiDepasse:
+        raise RuntimeError("Gestion de production ouverte mais barre d'outils introuvable "
+                           f"(fenêtre au premier plan : {titre_premier_plan()!r})")
+    log.info("Gestion de production ouverte")
 
 
 def quitter_gestion_production(window, timeout=60):
@@ -678,8 +833,9 @@ def modifier_repere_secondaire(window):
     # Attend que la grille des repères secondaires (colonne Profil) soit chargée, puis lui donne le focus
     grille = trouver_grille(window, "Profil")
     focus_premiere_ligne(grille)
+    nb_lignes = sum(1 for l in grille.children(control_type="Custom") if l.window_text() != "Ligne du haut")
     send_keys("^a{ENTER}")
-    remplir_commentaire_2(window, COMMENTAIRE_2)
+    remplir_commentaire_2(window, COMMENTAIRE_2, nb_lignes)
 
 
 def commentaire_gr(window):
@@ -707,8 +863,42 @@ def commentaire_gr(window):
     if n == 0:
         return
 
-    send_keys("{ENTER}")  # ouvre la fenêtre d'édition pour les lignes sélectionnées
-    remplir_commentaire_2(window, COMMENTAIRE_GR)
+    send_keys("{ENTER}")  # ouvre la fiche pour les lignes sélectionnées
+    remplir_commentaire_2(window, COMMENTAIRE_GR, n)
+
+
+def trouver_boutons_fiche_action(window):
+    # Gestion de production : boutons Fiche de débit et Action sans nom, dans la colonne d'icônes
+    # à droite de la liste Sélection. Fiche de débit = le plus haut de la colonne, Action = le plus bas.
+    largeur = window.wrapper_object().rectangle().width()
+    groupes = []   # [centre x moyen, [(haut, bouton), ...]]
+    for e in window.wrapper_object().descendants(control_type="Button"):
+        try:
+            if (e.window_text() or "").strip():
+                continue
+            r = e.rectangle()
+            if not (40 <= r.width() <= 90 and 40 <= r.height() <= 60):
+                continue
+            centre = (r.left + r.right) // 2
+            if centre < 0.15 * largeur:   # boutons de gauche (outils de la liste) : exclus
+                continue
+            for g in groupes:
+                if abs(g[0] - centre) <= 20:
+                    g[1].append((r.top, e))
+                    break
+            else:
+                groupes.append([centre, [(r.top, e)]])
+        except COMError:
+            pass
+
+    if not groupes:
+        raise RuntimeError("Boutons Fiche de débit / Action introuvables dans Gestion de production")
+    colonne = max(groupes, key=lambda g: len(g[1]))[1]
+    if len(colonne) < 2:
+        raise RuntimeError("Boutons Fiche de débit / Action introuvables dans Gestion de production")
+    colonne.sort(key=lambda x: x[0])
+    log.info("Fiche de débit = icône du haut, Action = icône du bas (%d icônes dans la colonne)", len(colonne))
+    return colonne[0][1], colonne[-1][1]
 
 
 def impression(window):
@@ -729,14 +919,76 @@ def impression(window):
     attendre_appli(window)
 
     barre_droite = window.child_window(auto_id="barDroite", control_type="Pane")
-    fiche_debit = barre_droite.child_window(control_type="Button", found_index=0)
-    action = barre_droite.child_window(control_type="Button", found_index=5)
+    action_barre = barre_droite.child_window(control_type="Button", found_index=5)
+    # Barre droite utilisée seulement si son bouton Action est réellement visible
+    # (la barre peut exister dans Gestion de production sans être affichée)
+    if barre_droite.exists(timeout=5) and action_barre.exists(timeout=2) and action_barre.is_visible():
+        fiche_debit = barre_droite.child_window(control_type="Button", found_index=0)
+        action = action_barre
+    else:
+        # Gestion de production : icônes sans nom de la colonne Sélection
+        fiche_debit, action = trouver_boutons_fiche_action(window)
     attendre(action, "exists visible")
 
     # Action grisée = Fiche de débit non sélectionnée : on la sélectionne d'abord
     if not action.is_enabled():
         cliquer(fiche_debit)
-        action.wait("enabled", timeout=30, retry_interval=0.2)
+        wait_until(30, 0.2, action.is_enabled)
+
+    cliquer(action)
+    attendre_appli(window)
+
+    # Fenêtre « Aperçu x/y » ouverte par Action : Fichier > Imprimer tout
+    apercu = DESKTOP.window(title_re=r"Aper.u \d+/\d+")
+    attendre(apercu, "exists visible", timeout=60)
+    menu = apercu.child_window(title="Application", control_type="MenuBar")
+    cliquer(menu.child_window(title="Fichier", control_type="MenuItem"))
+
+    # « Imprimer tout » : ID de commande MFC 32775 (le menu apparaît deux fois dans l'arborescence)
+    imprimer_tout = apercu.child_window(auto_id="32775", control_type="MenuItem", found_index=0)
+    cliquer(imprimer_tout)
+    return enregistrer_pdf()
+
+
+def impression_gestion_production(window):
+    # Même méthode que Gestion d'Affaires (Fiche de débit + Action, puis PDF),
+    # mais dans l'écran Gestion de production déjà ouvert : pas d'ouverture ni de fermeture de Gestion d'Affaires
+    # Filtre sur l'affaire, puis vue Repère secondaire directement (pas de filtre par phase)
+    window.set_focus()
+    filtrer_par_affaire(window)                    # l'affaire en cours (Ctrl+F3)
+    filtrer_parrepere_secondaire(window)           # vue Repère secondaire (Ctrl+F6)
+    attendre_appli(window)
+    grille_reperes = trouver_grille(window, "Profil")
+    nb_reperes = sum(1 for l in grille_reperes.children(control_type="Custom")
+                     if l.window_text() != "Ligne du haut")
+    log.info("Repères affichés pour l'impression : %d", nb_reperes)
+
+    # Focus dans la grille des repères secondaires, puis sélection de toutes les lignes
+    focus_grille_haut(window)
+    send_keys("^a")
+    attendre_appli(window)
+
+    # Mettre en sélection : raccourci Maj+Inser
+    window.set_focus()
+    send_keys("+{INSERT}")
+    attendre_appli(window)
+
+    barre_droite = window.child_window(auto_id="barDroite", control_type="Pane")
+    action_barre = barre_droite.child_window(control_type="Button", found_index=5)
+    # Barre droite utilisée seulement si son bouton Action est réellement visible
+    # (la barre peut exister dans Gestion de production sans être affichée)
+    if barre_droite.exists(timeout=5) and action_barre.exists(timeout=2) and action_barre.is_visible():
+        fiche_debit = barre_droite.child_window(control_type="Button", found_index=0)
+        action = action_barre
+    else:
+        # Gestion de production : icônes sans nom de la colonne Sélection
+        fiche_debit, action = trouver_boutons_fiche_action(window)
+    attendre(action, "exists visible")
+
+    # Action grisée = Fiche de débit non sélectionnée : on la sélectionne d'abord
+    if not action.is_enabled():
+        cliquer(fiche_debit)
+        wait_until(30, 0.2, action.is_enabled)
 
     cliquer(action)
     attendre_appli(window)
@@ -901,15 +1153,14 @@ def main_complet():
     selectionner_phases(window)
     modifier_repere_secondaire(window)
     commentaire_gr(window)
-    quitter_gestion_production(window)
-    chemin_pdf = impression(window)
+
+    # Impression dans la Gestion de production (sans la quitter)
+    chemin_pdf = impression_gestion_production(window)
     fermer_pdf_ouverts(chemin_pdf)
     fermer_apercu()
     revenir_steel_projects(window)
-    quitter_gestion_affaires(window)
 
-   
-    # Comparaison avec Claude, une fois l'impression terminée et Steel Projects revenu à l'accueil
+    # Comparaison avec Claude, une fois l'impression terminée
     print("=== Comparaison avec Claude ===")
     fichiers = claude.comparer_avec_claude(
         claude.fichiers_affaire(AFFAIRE, chemin_pdf),
@@ -919,17 +1170,14 @@ def main_complet():
     fermer_visionneuses(fichiers)
     revenir_steel_projects(window)
 
-    # Correction des repères « _ » : rouvre la Gestion de production sur l'affaire
-    print("=== Correction scribing jarret ===")
-    ouvrir_gestion_production(window)
-    filtrer_par_affaire(window)
-    corection_scribing.corriger_scribing_jarret(window, AFFAIRE)
+    # Étapes suivies dans la même Gestion de production
+    # print("=== Correction scribing jarret ===")
+    # corection_scribing.corriger_scribing_jarret(window, AFFAIRE)
 
     # Affectation machine (classeur de Claude) dans CMNTR1, même écran Gestion de production
     print("=== Affectation machine ===")
     affectation_machine.affectation_machine(window, AFFAIRE)
-    # quitter_gestion_production(window)
-    convertir_fers_plats(window,AFFAIRE)
+    convertir_fers_plats(window, AFFAIRE)
     quitter_gestion_production(window)
     print("projet réussi")
 

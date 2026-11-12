@@ -37,6 +37,7 @@ def trouver_croquis(affaire):
     candidats = [
         os.path.join(DOSSIER_CROQUIS.format(affaire=affaire), "CROQUIS DEBITAGE.PDF"),
         os.path.join(DOSSIER_PROJETS_A_TRAVAILLER, affaire, f"CROQUIS DEBITAGE {affaire}.pdf"),
+        os.path.join(DOSSIER_PROJETS_A_TRAVAILLER, affaire, f"{affaire}-CROQUIS DEBITAGE.pdf"),
     ]
     for chemin in candidats:
         if os.path.exists(chemin):

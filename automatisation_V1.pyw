@@ -251,6 +251,7 @@ def traiter_projet(window, dossier_projet):
     else:
         log.info("Import TEKLA_XML")
         pp.importer_tekla(window, dossier_projet)
+
     pp.ouvrir_gestion_production(window)
     pp.filtrer_par_affaire(window)
     pp.filtre_par_phase(window)
@@ -258,15 +259,15 @@ def traiter_projet(window, dossier_projet):
     pp.selectionner_phases(window)
     pp.modifier_repere_secondaire(window)
     pp.commentaire_gr(window)
-    pp.quitter_gestion_production(window)
-    pp.fermer_apercu()
-    chemin_pdf = pp.impression(window)
+
+    # Impression dans la Gestion de production (sans la quitter)
+    log.info("=== Impression (Gestion de production) ===")
+    chemin_pdf = pp.impression_gestion_production(window)
     pp.fermer_pdf_ouverts(chemin_pdf)
     pp.fermer_apercu()
     pp.revenir_steel_projects(window)
-    pp.quitter_gestion_affaires(window)
 
-    # Comparaison avec Claude, une fois l'impression terminée et Steel Projects revenu à l'accueil
+    # Comparaison avec Claude, une fois l'impression terminée
     if COMPARAISON_CLAUDE:
         log.info("=== Comparaison avec Claude ===")
         fichiers = claude.comparer_avec_claude(
@@ -277,21 +278,18 @@ def traiter_projet(window, dossier_projet):
         pp.fermer_visionneuses(fichiers)
         pp.revenir_steel_projects(window)  # Claude avait pris le focus
 
-    if CORRECTION_SCRIBING or AFFECTATION_MACHINE or CONVERSION_FERS_PLATS:
-        pp.ouvrir_gestion_production(window)
-        pp.filtrer_par_affaire(window)
-        # Correction scribing jarret désactivée (bloc commenté)
-#        if CORRECTION_SCRIBING:
-#            log.info("=== Correction scribing jarret ===")
-#            corection_scribing.corriger_scribing_jarret(window, affaire)
-        if AFFECTATION_MACHINE:
-            log.info("=== Affectation machine ===")
-            affectation_machine.affectation_machine(window, affaire)
-        if CONVERSION_FERS_PLATS:
-            log.info("=== Conversion fers plats ===")
-            convertir_fers_plats(window, affaire)
-        pp.quitter_gestion_production(window)
+    # Étapes suivies dans la même Gestion de production
+    if CORRECTION_SCRIBING:
+        log.info("=== Correction scribing jarret ===")
+        corection_scribing.corriger_scribing_jarret(window, affaire)
+    if AFFECTATION_MACHINE:
+        log.info("=== Affectation machine ===")
+        affectation_machine.affectation_machine(window, affaire)
+    if CONVERSION_FERS_PLATS:
+        log.info("=== Conversion fers plats ===")
+        convertir_fers_plats(window, affaire)
 
+    pp.quitter_gestion_production(window)
     log.info("=== Fin du projet %s ===", affaire)
 
 
@@ -301,6 +299,12 @@ def recuperer_apres_erreur(window):
         pp.fermer_apercu(timeout=10)
     except Exception:
         log.warning("Impossible de fermer la fenêtre d'aperçu")
+
+    # Fiche « Repère Secondaire » restée ouverte après l'erreur : fermée sans enregistrer
+    try:
+        pp.fermer_fiche_repere(pp.trouver_fiche_repere(window, timeout=2))
+    except Exception:
+        pass   # aucune fiche ouverte
 
     for ecran in ("Gestion de production", TITRE_GESTION_AFFAIRES):
         try:
